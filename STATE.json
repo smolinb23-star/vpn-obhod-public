@@ -1,0 +1,52 @@
+{
+  "stage": 2,
+  "stage_status": "code_done_pending_ci_v3",
+  "ci_builds": {
+    "1": "FAIL AGP 8.7.3",
+    "2": "FAIL gradle wrapper",
+    "3": "in_progress AGP 8.11.1 wrapper committed"
+  },
+  "build_mode": "github_actions",
+  "chosen_branches": {
+    "vpn_core": "flutter_vless ^1.1.7",
+    "parser": "pure_dart_primary + FlutterVless.parse fallback",
+    "ci": "subosito/flutter-action@v2 stable, JDK17, ubuntu-latest, artifact v4",
+    "bypass_methods": "mock (детерминированные по seed) — боевые провайдеры подключаются заменой bypassMethodsProvider",
+    "wins_storage": "InMemoryWinsRepository (demo) / SqliteWinsRepository (готов, подключение на Этапе 3)"
+  },
+  "manual_required": [
+    {
+      "id": "revoke_token",
+      "task": "ОТЗВАТЬ PAT в GitHub Settings → Developer settings → PAT classic. Токен прошёл через чат — компрометация."
+    },
+    {
+      "id": "release_signing",
+      "task": "После первой зелёной сборки: keytool -genkeypair, секреты в gh secret set KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD"
+    },
+    {
+      "id": "vps",
+      "task": "VPS с Xray (VLESS Reality) — для боевых методов обхода"
+    }
+  ],
+  "contracts": {
+    "BypassMethod": "id, name, mock, isAvailable(), probe()->ProbeResult{success,latencyMs,realIpChanged,error}, connect(), disconnect(), healthStream",
+    "BypassOrchestrator": "start(networkKey), stop(), setManualOverride(id|null), onHealthSample(h), state/active/probeRounds, stateStream/activeStream",
+    "TrafficVerifier": "verifyTraffic() -> bool? (true=IP изменился, false=не идёт, null=неизвестно)",
+    "WinsRepository": "winsFor/recordWin/bestMethodFor(networkKey); SQLite: bypass_wins(method_id,network_key,wins,last_success_ts)",
+    "VpnService": "initialize/start/stop/statusStream/metricsStream/fetchPublicIp/verifyRealTraffic/probeDelay"
+  },
+  "orchestrator_params": {
+    "probe_timeout_s": 8,
+    "degraded_rtt_ms": 300,
+    "degraded_loss_ratio": 0.02,
+    "hysteresis_samples": 3,
+    "dead_samples": 3,
+    "dwell_min": 5
+  },
+  "tests": {
+    "profile_parser": 8,
+    "config_validator": 8,
+    "bypass_orchestrator": 8
+  },
+  "next_step": "1) пользователь ставит git/gh/JDK + PAT -> gh repo create + push -> CI зелёный -> APK в ./dist; 2) keystore + релизная подпись; 3) Этап 3 (стабильность)"
+}
