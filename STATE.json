@@ -1,0 +1,83 @@
+{
+  "stage": 2.5,
+  "stage_status": "done_conf_import_apk_delivered",
+  "apk": {
+    "local": "dist/app-release.apk",
+    "size_bytes": 88090819,
+    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-be016a6136f2c3c7a4778b90bada5220364c3ad0",
+    "ci_run": 42422097174,
+    "signing": "debug (release keystore — MANUAL)",
+    "magic": "PK ZIP"
+  },
+  "repos": {
+    "private": "smolinb23-star/vpn-obhod (заблокирован GitHub API 403 trade controls — token в истории, Push Protection не пропустит)",
+    "public": "smolinb23-star/vpn-obhod-public (orphan-история без PAT, пуш .tools/push_clean.py)"
+  },
+  "network_note": "Скачивание Actions-артефактов недоступно (*.blob.core.windows.net блокируется сетью) — workflow дублирует APK в GitHub Release (objects.githubusercontent.com проходит)",
+  "ci_builds": {
+    "1": "FAIL AGP 8.7.3",
+    "2": "FAIL gradle wrapper",
+    "3": "FAIL shrinkResources -> fixed ef86904",
+    "public_1": "SUCCESS 247c416 (analyze+24 tests+apk)",
+    "public_2": "SUCCESS 2755859 (+Release publish) -> APK скачан",
+    "public_3": "SUCCESS 6163d29 (orphan mirror без PAT) -> финальный APK",
+    "public_4": "FAIL 3b50940 (тесты: неканонический base64 в тестовых PSK)",
+    "public_5": "SUCCESS be016a6 (+.conf import, 43 теста) -> APK 88090819"
+  },
+  "build_mode": "github_actions",
+  "chosen_branches": {
+    "vpn_core": "flutter_vless ^1.1.7",
+    "parser": "pure_dart_primary + FlutterVless.parse fallback",
+    "ci": "subosito/flutter-action@v2 stable, JDK21, ubuntu-latest, artifact v4 + Release publish",
+    "bypass_methods": "mock (детерминированные по seed) — боевые провайдеры подключаются заменой bypassMethodsProvider",
+    "wins_storage": "InMemoryWinsRepository (demo) / SqliteWinsRepository (готов, подключение на Этапе 3)"
+  },
+  "manual_required": [
+    {
+      "id": "revoke_token",
+      "task": "ОТЗВАТЬ PAT в GitHub Settings → Developer settings → PAT classic. Токен прошёл через чат — компрометация. В публичном репо отсутствует (orphan-коммит)."
+    },
+    {
+      "id": "install_apk",
+      "task": "Установить dist/app-release.apk на Android-устройство (debug-подпись, allow unknown sources)"
+    },
+    {
+      "id": "release_signing",
+      "task": "После подтверждения работы: keytool -genkeypair, секреты в gh secret set KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD"
+    },
+    {
+      "id": "vps",
+      "task": "VPS с Xray (VLESS Reality) — для боевых методов обхода"
+    }
+  ],
+  "contracts": {
+    "BypassMethod": "id, name, mock, isAvailable(), probe()->ProbeResult{success,latencyMs,realIpChanged,error}, connect(), disconnect(), healthStream",
+    "BypassOrchestrator": "start(networkKey), stop(), setManualOverride(id|null), onHealthSample(h), state/active/probeRounds, stateStream/activeStream",
+    "TrafficVerifier": "verifyTraffic() -> bool? (true=IP изменился, false=не идёт, null=неизвестно)",
+    "WinsRepository": "winsFor/recordWin/bestMethodFor(networkKey); SQLite: bypass_wins(method_id,network_key,wins,last_success_ts)",
+    "VpnService": "initialize/start/stop/statusStream/metricsStream/fetchPublicIp/verifyRealTraffic/probeDelay"
+  },
+  "orchestrator_params": {
+    "probe_timeout_s": 8,
+    "degraded_rtt_ms": 300,
+    "degraded_loss_ratio": 0.02,
+    "hysteresis_samples": 3,
+    "dead_samples": 3,
+    "dwell_min": 5
+  },
+  "tests": {
+    "profile_parser": 8,
+    "config_validator": 8,
+    "bypass_orchestrator": 8,
+    "wireguard_parser": 19
+  },
+  "conf_import": {
+    "plugin": "file_picker ^8.3.7 (8.x совместим с Dart SDK 3.2)",
+    "parser": "WGConfigParser: lib/core/services/wireguard_parser.dart, модель WireGuardConfig",
+    "tunnel": "Xray wireguard-outbound через существующий flutter_vless (ядро xray-android содержит wireguard — 970 вхождений в libxray.so)",
+    "amnezia_extensions": "Jc/Jmin/Jmax/H1-H4/S1/S2 сохраняются в cfg.amnezia, через Xray НЕ применяются (plain WG); нативный AmneziaWG-движок — опция Этапа 3",
+    "ui": "ConfImportScreen (иконка-скрепка в AppBar HomeScreen), также вставка .conf текстом в главное поле",
+    "gotcha": "Dart base64Decode отвергает неканонические ключи — тестовые ключи должны быть каноническим base64 от 32 случайных байт"
+  },
+  "next_step": "1) проверка .conf-импорта на устройстве; 2) Этап 3: Foreground Service + неубиваемость (call/sleep), смена сети Wi-Fi↔LTE, SSID/operator→network_key, SqliteWinsRepository; 3) опция: нативный AmneziaWG-движок (Jc/H1-H4 obfuscation); 4) боевые методы при появлении VPS"
+}
