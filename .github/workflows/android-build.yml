@@ -9,6 +9,8 @@ jobs:
   build:
     name: Build APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -45,3 +47,16 @@ jobs:
           name: app-release-apks
           path: build/app/outputs/flutter-apk/*.apk
           retention-days: 14
+
+      # Blob-хранилище артефактов недоступно из некоторых сетей — дублируем
+      # APK в GitHub Releases (objects.githubusercontent.com доступен везде).
+      - name: Publish APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "apk-$GITHUB_SHA" \
+            build/app/outputs/flutter-apk/app-release.apk \
+            --title "APK ${{ github.sha }}" \
+            --notes "Automated build (debug-signed). Commit: ${{ github.sha }}" \
+            || gh release upload "apk-$GITHUB_SHA" \
+              build/app/outputs/flutter-apk/app-release.apk --clobber
