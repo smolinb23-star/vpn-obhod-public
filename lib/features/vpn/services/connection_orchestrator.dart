@@ -238,7 +238,6 @@ class ConnectionOrchestrator {
       case ConnectionMethodType.cidr:
         return 4;
     }
-    return 0;
   }
 
   /// Определяет тип VLESS конфига: Reality=0, CDN/XHTTP=1, plain=2

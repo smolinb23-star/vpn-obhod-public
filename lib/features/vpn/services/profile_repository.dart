@@ -1,10 +1,7 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite/sqflite.dart';
-
-import 'package:vpn_service/core/models/vpn_config.dart';
 
 /// Профиль конфигурации для хранения в SQLite.
 class ProfileEntity {

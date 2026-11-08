@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'package:vpn_service/features/vpn/services/connection_orchestrator.dart';
-import 'package:vpn_service/features/vpn/services/vpn_service.dart';
 import 'package:vpn_service/features/vpn/vpn_controller.dart';
 
 /// Экран «Исключённые приложения» (Split Tunneling).
@@ -35,7 +33,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
 
   bool _loading = true;
   bool _saving = false;
-  String _searchQuery = '';
 
   @override
   void initState() {
@@ -85,7 +82,7 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
           _loading = false;
         });
       }
-    } on Object catch (e) {
+    } on Object catch (_) {
       if (mounted) {
         setState(() => _loading = false);
       }
@@ -94,7 +91,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
 
   void _filterApps(String query) {
     setState(() {
-      _searchQuery = query;
       if (query.isEmpty) {
         _filteredApps = List.from(_allApps);
       } else {
@@ -115,9 +111,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
       }
     });
   }
-
-  bool _isSelected(String packageName) =>
-      _selectedPackages.contains(packageName);
 
   Future<void> _save() async {
     setState(() => _saving = true);
