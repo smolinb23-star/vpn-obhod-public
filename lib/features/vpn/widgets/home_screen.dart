@@ -287,7 +287,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: 24),
-              if (connected) ...[
               if (_attemptHistory.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 Container(
