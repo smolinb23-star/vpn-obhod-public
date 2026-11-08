@@ -8,7 +8,6 @@ import 'package:vpn_service/features/vpn/services/vpn_service.dart';
 import 'package:vpn_service/features/vpn/vpn_controller.dart';
 import 'package:vpn_service/features/vpn/widgets/config_management_screen.dart'
     show ConfigManagementScreen, savedConfigsProvider;
-import 'package:vpn_service/features/vpn/widgets/split_tunneling_screen.dart';
 
 /// Упрощённый главный экран (Smart Connect).
 ///

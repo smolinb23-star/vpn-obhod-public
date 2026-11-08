@@ -1,6 +1,7 @@
 import 'package:device_apps/device_apps.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:vpn_service/features/vpn/services/connection_orchestrator.dart';
 import 'package:vpn_service/features/vpn/services/vpn_service.dart';
@@ -291,18 +292,3 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
     }
   }
 }
-
-/// Режим раздельного туннелирования.
-enum SplitTunnelMode {
-  allThroughVpn, // Все через VPN
-  onlySelected, // Только выбранные приложения через VPN
-  exceptSelected, // Все кроме выбранных через VPN
-}
-
-/// Провайдер режима раздельного туннелирования.
-final splitTunnelModeProvider =
-    StateProvider<SplitTunnelMode>((ref) => SplitTunnelMode.allThroughVpn);
-
-/// Провайдер списка выбранных пакетов.
-final selectedAppsProvider =
-    StateProvider<Set<String>>((ref) => <String>{});

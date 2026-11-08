@@ -291,7 +291,7 @@ class VpnController extends Notifier<VpnUiState> {
         }
       });
       try {
-        await _service.start(config, excludedApps: excludedAppsForVpnService);
+        await _service.start(config);
         state = state.copyWith(
           state: TunnelState.connecting,
           remark: config.remark,

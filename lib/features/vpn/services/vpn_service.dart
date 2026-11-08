@@ -98,7 +98,7 @@ class VpnService {
   ///
   /// [excludedApps] — список package names, которые НЕ будут идти через VPN
   /// (раздельное туннелирование).
-  Future<void> start(VpnConfig config, {List<String>? excludedApps}) async {
+  Future<void> start(VpnConfig config) async {
     _validator.validateOrThrow(config.xrayJson);
     _publicIpBefore = await fetchPublicIp();
     final allowed = await _controller.requestPermission();
@@ -108,15 +108,13 @@ class VpnService {
     await _controller.startVless(
       remark: config.remark,
       config: config.xrayJson,
-      excludedApps: excludedApps,
     );
     _started = true;
   }
 
   /// Запускает каскадный туннель: сначала до промежуточного сервера,
   /// затем трафик перенаправляется на зарубежный сервер.
-  Future<void> startCascade(VpnConfig config,
-      {List<String>? excludedApps}) async {
+  Future<void> startCascade(VpnConfig config) async {
     _validator.validateOrThrow(config.xrayJson);
     _publicIpBefore = await fetchPublicIp();
     final allowed = await _controller.requestPermission();
@@ -127,15 +125,13 @@ class VpnService {
     await _controller.startVless(
       remark: config.cascadeOutbound1?.remark ?? config.remark,
       config: config.cascadeOutbound1?.xrayJson ?? config.xrayJson,
-      excludedApps: excludedApps,
     );
     _started = true;
   }
 
   /// Запускает CIDR-маршрутизацию: трафик только к указанным IP-адресам
   /// проходит через VPN, остальной — напрямую.
-  Future<void> startCidr(VpnConfig config,
-      {List<String>? excludedApps}) async {
+  Future<void> startCidr(VpnConfig config) async {
     _validator.validateOrThrow(config.xrayJson);
     _publicIpBefore = await fetchPublicIp();
     final allowed = await _controller.requestPermission();
@@ -145,7 +141,6 @@ class VpnService {
     await _controller.startVless(
       remark: config.remark,
       config: config.xrayJson,
-      excludedApps: excludedApps,
     );
     _started = true;
   }
