@@ -1,11 +1,11 @@
 {
-  "stage": 4.1,
-  "stage_status": "done_split_tunneling_apk_delivered",
+  "stage": 4.2,
+  "stage_status": "done_mobile_priority_apk_delivered",
   "apk": {
     "local": "dist/app-release.apk",
-    "size_bytes": 101756662,
-    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-e849f214534b6d4065f45a55fcdb09f89728790a",
-    "ci_run": 42488618012,
+    "size_bytes": 104517972,
+    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-6cab7d863774ae31f6e717d3603e1ecabe617d55",
+    "ci_run": 42494311956,
     "signing": "debug (release keystore — MANUAL)",
     "magic": "PK ZIP",
     "native_libs": "libam-go.so + libam-quick.so + libam.so (AWG) + libxray.so (VLESS) для arm64-v8a/armeabi-v7a/x86_64"
@@ -133,5 +133,5 @@
     "ui": "ConfImportScreen (иконка-скрепка в AppBar HomeScreen), также вставка .conf текстом",
     "gotcha": "Dart base64Decode отвергает неканонические ключи — тестовые ключи должны быть каноническим base64 от 32 случайных байт"
   },
-  "next_step": "Этап 4.1 завершён (Smart Auto-Connect: ConnectionOrchestrator, ConfigManagementScreen, упрощённый HomeScreen, CDN/cascade/cascade конфиги, CIDR-маршрутизация). Дальше: проверка на телефоне (одна кнопка, авто-подбор протокола, YouTube/Gemini), затем Этап 5 (звонки peer_rtc + Opus, офлайн-сообщения flutter_mesh_network, чат UI)"
+  "next_step": "Этап 4.2 завершён (Приоритизация методов для мобильных сетей: VLESS Reality → VLESS XHTTP → CIDR → Hysteria2 → AmneziaWG (последний); экран «Исключённые приложения» с ручным вводом пакетов, тремя режимами; сохранение в flutter_secure_storage; новые тесты проходят). Дальше: проверка на телефоне (одна кнопка, авто-подбор протокола, YouTube/Gemini), затем Этап 5 (звонки peer_rtc + Opus, офлайн-сообщения flutter_mesh_network, чат UI)"
 }
