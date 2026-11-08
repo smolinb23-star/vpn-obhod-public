@@ -187,7 +187,7 @@ class ClashYamlParser {
         warnings: List<String>.unmodifiable(warnings),
       );
 
-      result.add(wgConfig.toVpnConfig());
+      result.add(toVpnConfig(wgConfig));
     }
 
     if (result.isEmpty) {

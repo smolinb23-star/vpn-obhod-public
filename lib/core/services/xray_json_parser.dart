@@ -140,7 +140,7 @@ class XrayJsonParser {
     );
   }
 
-  (String, int?) _splitEndpoint(String? value) {
+  (String?, int?) _splitEndpoint(String? value) {
     if (value == null || value.isEmpty) return (null as String?, null as int?);
     final v = value.trim();
     if (v.startsWith('[')) {
