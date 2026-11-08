@@ -1,14 +1,17 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:vpn_service/features/vpn/services/app_list_service.dart';
+import 'package:vpn_service/core/services/app_list_service.dart';
 import 'package:vpn_service/features/vpn/vpn_controller.dart';
 
 /// Экран «Исключённые приложения» (Split Tunneling).
 ///
 /// Список приложений загружается нативно через PackageManager (MethodChannel),
-/// иконки отображаются из base64. Ручной ввод пакетов убран.
+/// иконки отображаются из base64. Выбранные пакеты сохраняются в
+/// shared_preferences и передаются в Mihomo через PROCESS-NAME правила.
 class SplitTunnelingScreen extends ConsumerStatefulWidget {
   const SplitTunnelingScreen({super.key});
 
@@ -18,20 +21,14 @@ class SplitTunnelingScreen extends ConsumerStatefulWidget {
 }
 
 class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
-  final secureStorage = const FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-  );
-
-  static const _modeKey = 'split_tunnel_mode';
-  static const _selectedPkgsKey = 'split_tunnel_selected_packages';
-
+  List<InstalledApp> _allApps = [];
+  List<InstalledApp> _filteredApps = [];
   final Set<String> _selectedPackages = <String>{};
   SplitTunnelMode _mode = SplitTunnelMode.allThroughVpn;
 
-  List<InstalledApp> _allApps = [];
-  List<InstalledApp> _filteredApps = [];
   bool _loading = false;
   bool _saving = false;
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -41,9 +38,9 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final storage = ref.read(secureStorageProvider);
-    final modeRaw = await storage.read(key: _modeKey);
-    final pkgsRaw = await storage.read(key: _selectedPkgsKey);
+    final prefs = await SharedPreferences.getInstance();
+    final modeRaw = prefs.getString('split_tunnel_mode');
+    final pkgsRaw = prefs.getStringList('split_tunnel_selected_packages') ?? <String>[];
 
     if (mounted) {
       setState(() {
@@ -52,19 +49,17 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
           (m) => m.index == modeIndex,
           orElse: () => SplitTunnelMode.allThroughVpn,
         );
-        if (pkgsRaw != null && pkgsRaw.isNotEmpty) {
-          _selectedPackages.addAll(pkgsRaw.split(','));
-        }
+        _selectedPackages.addAll(pkgsRaw);
       });
     }
   }
 
   Future<void> _saveSettings() async {
-    final storage = ref.read(secureStorageProvider);
-    await storage.write(key: _modeKey, value: _mode.index.toString());
-    await storage.write(
-      key: _selectedPkgsKey,
-      value: _selectedPackages.join(','),
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('split_tunnel_mode', _mode.index.toString());
+    await prefs.setStringList(
+      'split_tunnel_selected_packages',
+      _selectedPackages.toList(),
     );
   }
 
@@ -87,12 +82,14 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
 
   void _filterApps(String query) {
     setState(() {
+      _searchQuery = query;
       if (query.isEmpty) {
         _filteredApps = List.from(_allApps);
       } else {
         final q = query.toLowerCase();
         _filteredApps = _allApps
-            .where((a) => a.name.toLowerCase().contains(q) ||
+            .where((a) =>
+                a.name.toLowerCase().contains(q) ||
                 a.packageName.toLowerCase().contains(q))
             .toList();
       }
@@ -174,7 +171,8 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
                   const SizedBox(height: 8),
                   Text(
                     'Выберите приложения из списка ниже. '
-                    'Иконки и названия загружаются из системы.',
+                    'Иконки и названия загружаются из системы. '
+                    'Выбранные приложения будут исключены из VPN-туннеля.',
                     style: theme.textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),
@@ -274,3 +272,5 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
     }
   }
 }
+
+import 'package:shared_preferences/shared_preferences.dart';

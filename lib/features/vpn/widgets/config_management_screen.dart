@@ -3,19 +3,26 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:vpn_service/core/models/vpn_config.dart';
+import 'package:vpn_service/core/services/app_log.dart';
+import 'package:vpn_service/core/services/clash_yaml_parser.dart';
+import 'package:vpn_service/core/services/mihomo_service.dart';
+import 'package:vpn_service/core/services/profile_parser.dart';
+import 'package:vpn_service/core/services/profile_repository.dart';
 import 'package:vpn_service/core/services/wireguard_parser.dart';
-import 'package:vpn_service/features/vpn/services/connection_orchestrator.dart';
+import 'package:vpn_service/core/services/xray_json_parser.dart';
 import 'package:vpn_service/features/vpn/vpn_controller.dart';
 
 /// Экран «Управление конфигами».
 ///
 /// Позволяет:
-///  - вставлять текст конфига (vless:// ссылка или .conf текст);
-///  - выбирать .conf файл из памяти устройства;
-///  - сохранять конфиги с именами между перезапусками;
+///  - вставлять текст конфига (Clash YAML, .conf, Xray JSON, ссылки);
+///  - выбирать файл из памяти устройства;
+///  - сохранять конфиги в SQLite (sqflite) между перезапусками;
 ///  - просматривать список сохранённых конфигов;
-///  - удалять конфиги.
+///  - редактировать и удалять конфиги.
 class ConfigManagementScreen extends ConsumerStatefulWidget {
   const ConfigManagementScreen({super.key});
 
@@ -43,16 +50,16 @@ class _ConfigManagementScreenState
   }
 
   Future<void> _loadLastConfig() async {
-    final storage = ref.read(secureStorageProvider);
-    final raw = await storage.read(key: 'last_config_input');
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('last_config_input');
     if (raw != null && raw.isNotEmpty && mounted) {
       _inputCtrl.text = raw;
     }
   }
 
   Future<void> _saveLastConfig(String text) async {
-    final storage = ref.read(secureStorageProvider);
-    await storage.write(key: 'last_config_input', value: text);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('last_config_input', text);
   }
 
   bool _isValid(String s) {
@@ -70,8 +77,8 @@ class _ConfigManagementScreenState
     }
     if (t.contains('[Interface]') && t.contains('[Peer]')) return true;
     if (t.startsWith('{')) return true;
-    // CIDR-список (IP/маска, по одной в строке)
-    if (RegExp(r'^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}\s*)+$').hasMatch(t)) {
+    if (RegExp(r'^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}\s*)+$')
+        .hasMatch(t)) {
       return true;
     }
     if (RegExp(r'^[A-Za-z0-9+/=\s]+$').hasMatch(t) && t.length > 64) {
@@ -83,7 +90,7 @@ class _ConfigManagementScreenState
   Future<void> _pickFile() async {
     try {
       final result = await FilePicker.platform.pickFiles(
-        dialogTitle: 'Выберите .conf файл',
+        dialogTitle: 'Выберите конфиг файл',
         type: FileType.any,
         withData: true,
       );
@@ -110,7 +117,7 @@ class _ConfigManagementScreenState
     final input = _inputCtrl.text.trim();
     if (!_isValid(input)) {
       setState(() => _validationError =
-          'Неверный формат конфига. Вставьте ссылку или содержимое .conf.');
+          'Неверный формат конфига. Вставьте ссылку или содержимое файла.');
       return;
     }
 
@@ -122,50 +129,51 @@ class _ConfigManagementScreenState
     try {
       await _saveLastConfig(input);
 
-      final orchestrator =
-          ref.read(connectionOrchestratorProvider(false));
+      // Определяем тип конфига
+      String detectedType = 'other';
+      String name = 'Без имени';
 
       if (WGConfigParser.looksLikeWireGuardConf(input)) {
-        final cfg = const WGConfigParser().parse(input);
-        await orchestrator.saveAwgConfig(cfg);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Конфиг «${cfg.name}» сохранён')),
-          );
-        }
-      } else {
-        // Пытаемся распарсить как VLESS/подписку через VpnController
-        final vpnCtrl = ref.read(vpnControllerProvider.notifier);
-        final parsed = await vpnCtrl.importProfile(input);
-        if (parsed != null && mounted) {
-          // Определяем тип конфига для сохранения
-          if (parsed.isCascade) {
-            await orchestrator.saveCascadeConfig(parsed);
-          } else if (parsed.isCdnFronted) {
-            await orchestrator.saveCdnConfig(parsed);
-          } else if (parsed.isCidrList) {
-            await orchestrator.saveCidrConfig(parsed);
-          } else {
-            await orchestrator.saveVlessConfig(parsed);
+        final wg = const WGConfigParser().parse(input);
+        name = wg.name;
+        detectedType = 'awg';
+      } else if (ClashYamlParser.looksLikeClashYaml(input)) {
+        try {
+          final clashConfigs = const ClashYamlParser().parse(input);
+          if (clashConfigs.isNotEmpty) {
+            name = clashConfigs.first.remark;
+            detectedType = 'clash';
           }
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Конфиг «${parsed.remark}» сохранён')),
-            );
-          }
-          if (mounted) setState(() => _inputCtrl.clear());
-        } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Формат не распознан как vless:// ссылка или .conf.',
-              ),
-            ),
-          );
+        } on Object {
+          // ignore parse errors, will save as-is
         }
+      } else if (XrayJsonParser.looksLikeWireGuardXrayJson(input)) {
+        detectedType = 'xray';
+        name = 'Xray JSON';
       }
 
-      if (mounted) setState(() => _inputCtrl.clear());
+      final vpnCtrl = ref.read(vpnControllerProvider.notifier);
+      final parsed = await vpnCtrl.importProfile(input);
+      if (parsed != null) {
+        name = parsed.remark;
+        detectedType = parsed.type;
+      }
+
+      await _profiles.saveProfile(ProfileEntity(
+        id: name.hashCode.toString(),
+        name: name,
+        rawConfig: input,
+        type: detectedType,
+        priority: 0,
+        enabled: true,
+      ));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Конфиг «$name» сохранён')),
+        );
+        _inputCtrl.clear();
+      }
     } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -174,6 +182,28 @@ class _ConfigManagementScreenState
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _editConfig(ProfileEntity profile) async {
+    _inputCtrl.text = profile.rawConfig;
+    setState(() => _validationError = null);
+  }
+
+  Future<void> _deleteConfig(String id) async {
+    await _profiles.deleteProfile(id);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Конфиг удалён')),
+      );
+    }
+  }
+
+  Future<void> _toggleEnabled(String id, bool value) async {
+    await _profiles.updateProfile(id, enabled: value);
+  }
+
+  Future<void> _setPriority(String id, int priority) async {
+    await _profiles.updateProfile(id, priority: priority);
   }
 
   @override
@@ -203,9 +233,9 @@ class _ConfigManagementScreenState
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Вставьте vless:// ссылку, URL подписки или содержимое .conf файла.\n'
-                    'Поддерживаются: AmneziaWG (.conf), VLESS (vless://), '
-                    'CDN-фронт (WebSocket/XHTTP), каскадные конфиги, CIDR-списки.',
+                    'Вставьте Clash YAML, .conf, Xray JSON или ссылку.\n'
+                    'Поддерживаются: AmneziaWG (.conf), Clash/Mihomo YAML, '
+                    'VLESS (vless://), Xray JSON, подписки.',
                     style: theme.textTheme.bodySmall,
                   ),
                   const SizedBox(height: 8),
@@ -224,7 +254,7 @@ class _ConfigManagementScreenState
                           decoration: InputDecoration(
                             labelText: 'Конфиг',
                             hintText:
-                                'vless://uuid@host:port?path=/&host=... или [Interface]...',
+                                'Clash YAML, vless://, [Interface]... или {JSON}',
                             border: const OutlineInputBorder(),
                             alignLabelWithHint: true,
                             errorText: _validationError,
@@ -235,7 +265,7 @@ class _ConfigManagementScreenState
                       Column(
                         children: [
                           IconButton.filledTonal(
-                            tooltip: 'Выбрать .conf файл',
+                            tooltip: 'Выбрать файл',
                             onPressed: _busy ? null : _pickFile,
                             icon: const Icon(Icons.attach_file),
                           ),
@@ -251,7 +281,9 @@ class _ConfigManagementScreenState
                                     ),
                                   )
                                 : const Icon(Icons.save),
-                            label: _busy ? const Text('...') : const Text('Сохранить'),
+                            label: _busy
+                                ? const Text('...')
+                                : const Text('Сохранить'),
                           ),
                         ],
                       ),
@@ -269,17 +301,17 @@ class _ConfigManagementScreenState
   }
 }
 
-/// Список сохранённых конфигов.
+/// Список сохранённых конфигов с возможностью редактирования и удаления.
 class _SavedConfigsList extends ConsumerWidget {
   const _SavedConfigsList();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final configsAsync = ref.watch(savedConfigsProvider);
+    final profilesAsync = ref.watch(profilesProvider);
 
-    return configsAsync.when(
-      data: (configs) {
-        if (configs.isEmpty) {
+    return profilesAsync.when(
+      data: (profiles) {
+        if (profiles.isEmpty) {
           return Card(
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -312,39 +344,8 @@ class _SavedConfigsList extends ConsumerWidget {
                 Text('Сохранённые конфиги',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
-                ...configs.map((cfg) {
-                  final id = cfg['id'] as String? ?? '';
-                  final name = cfg['name'] as String? ?? 'Без имени';
-                  final typeIndex = cfg['type'] as int? ?? 1;
-                  final type = ConnectionMethodType.values.firstWhere(
-                    (t) => t.index == typeIndex,
-                    orElse: () => ConnectionMethodType.vless,
-                  );
-                  final typeName = switch (type) {
-                    ConnectionMethodType.amneziawg => 'AmneziaWG',
-                    ConnectionMethodType.vless => 'VLESS',
-                    ConnectionMethodType.cdn => 'CDN-фронт',
-                    ConnectionMethodType.cascade => 'Каскад',
-                    ConnectionMethodType.cidr => 'CIDR-маршрутизация',
-                  };
-                  return ListTile(
-                    title: Text(name),
-                    subtitle: Text('$typeName · $id'),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () async {
-                        await ref
-                            .read(connectionOrchestratorProvider(false))
-                            .deleteConfig(id);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Конфиг удалён')),
-                          );
-                        }
-                      },
-                    ),
-                  );
+                ...profiles.map((profile) {
+                  return _ConfigListTile(profile: profile);
                 }),
               ],
             ),
@@ -367,10 +368,143 @@ class _SavedConfigsList extends ConsumerWidget {
   }
 }
 
-/// Провайдер списка сохранённых конфигов.
-final savedConfigsProvider = FutureProvider<List<Map<String, dynamic>>>(
+/// Плитка конфига в списке.
+class _ConfigListTile extends ConsumerStatefulWidget {
+  final ProfileEntity profile;
+
+  const _ConfigListTile({required this.profile});
+
+  @override
+  ConsumerState<_ConfigListTile> createState() => _ConfigListTileState();
+}
+
+class _ConfigListTileState extends ConsumerState<_ConfigListTile> {
+  bool _editing = false;
+  late TextEditingController _nameCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.profile.name);
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        title: _editing
+            ? TextField(
+                controller: _nameCtrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                onSubmitted: (_) => _saveName(),
+              )
+            : Text(widget.profile.name),
+        subtitle: Text(
+          '${widget.profile.type.toUpperCase()} · приоритет ${widget.profile.priority}',
+          style: theme.textTheme.bodySmall,
+        ),
+        trailing: _editing
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.check),
+                    onPressed: _saveName,
+                    tooltip: 'Сохранить',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      setState(() => _editing = false);
+                      _nameCtrl.text = widget.profile.name;
+                    },
+                    tooltip: 'Отмена',
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      widget.profile.enabled
+                          ? Icons.check_circle
+                          : Icons.check_circle_outline,
+                      color: widget.profile.enabled
+                          ? Colors.green
+                          : Colors.grey,
+                    ),
+                    onPressed: () async {
+                      await ref
+                          .read(profileRepositoryProvider)
+                          .updateProfile(widget.profile.id,
+                              enabled: !widget.profile.enabled);
+                    },
+                    tooltip: widget.profile.enabled
+                        ? 'Отключить'
+                        : 'Включить',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () {
+                      setState(() => _editing = true);
+                    },
+                    tooltip: 'Редактировать',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () async {
+                      await ref
+                          .read(profileRepositoryProvider)
+                          .deleteProfile(widget.profile.id);
+                    },
+                    tooltip: 'Удалить',
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Future<void> _saveName() async {
+    final newName = _nameCtrl.text.trim();
+    if (newName.isNotEmpty && newName != widget.profile.name) {
+      await ref.read(profileRepositoryProvider).updateProfile(
+            widget.profile.id,
+            priority: widget.profile.priority,
+          );
+      // Пересохраняем с новым именем (создаём новую запись и удаляем старую)
+      final repo = ref.read(profileRepositoryProvider);
+      await repo.saveProfile(ProfileEntity(
+        id: newName.hashCode.toString(),
+        name: newName,
+        rawConfig: widget.profile.rawConfig,
+        type: widget.profile.type,
+        priority: widget.profile.priority,
+        enabled: widget.profile.enabled,
+      ));
+      await repo.deleteProfile(widget.profile.id);
+    }
+    if (mounted) setState(() => _editing = false);
+  }
+}
+
+/// Провайдер списка профилей из sqflite.
+final profilesProvider = FutureProvider<List<ProfileEntity>>(
   (ref) async {
-    final orchestrator = ref.read(connectionOrchestratorProvider(false));
-    return orchestrator.getAllSavedConfigs();
+    return ref.read(profileRepositoryProvider).getAllProfiles();
   },
 );

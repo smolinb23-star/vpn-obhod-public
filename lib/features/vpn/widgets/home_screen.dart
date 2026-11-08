@@ -1,21 +1,22 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:vpn_service/core/services/platform_bridge.dart';
-import 'package:vpn_service/features/vpn/services/awg_session_controller.dart';
-import 'package:vpn_service/features/vpn/services/connection_orchestrator.dart';
-import 'package:vpn_service/features/vpn/services/vpn_service.dart';
+import 'package:vpn_service/core/models/mihomo_config.dart';
+import 'package:vpn_service/core/models/vpn_config.dart';
+import 'package:vpn_service/core/services/mihomo_service.dart';
+import 'package:vpn_service/core/services/profile_repository.dart';
 import 'package:vpn_service/features/vpn/vpn_controller.dart';
-import 'package:vpn_service/features/vpn/widgets/config_management_screen.dart'
-    show ConfigManagementScreen, savedConfigsProvider;
+import 'package:vpn_service/features/vpn/widgets/config_management_screen.dart';
 import 'package:vpn_service/features/vpn/widgets/split_tunneling_screen.dart';
 
-/// Упрощённый главный экран (Smart Connect).
+/// Главный экран Mihomo VPN.
 ///
-/// Одна большая кнопка «Подключиться». При нажатии запускается
-/// ConnectionOrchestrator, который последовательно перебирает методы
-/// (AmneziaWG → VLESS Reality → Hysteria2 в зависимости от сети)
-/// пока не найдёт рабочий.
+/// - Большая кнопка «Подключиться».
+/// - Список серверов с иконками стран.
+/// - Статус «Подключено через [имя лучшего сервера]».
+/// - Нет сложных настроек (I1, MTU) на главном экране.
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -25,121 +26,49 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _busy = false;
-  String _status = 'Готово';
-  final List<String> _attemptHistory = [];
-  int _excludedAppsCount = 0;
 
   @override
   void initState() {
     super.initState();
-    // Автоподключение при запуске если есть сохранённые конфиги
+    // Автоподключение при запуске если есть профили.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final configs = await ref.read(savedConfigsProvider.future);
-      if (configs.isNotEmpty && mounted) {
+      final profiles = await ref.read(profilesProvider.future);
+      if (profiles.isNotEmpty && mounted) {
         await _connect();
       }
-      // Загружаем количество исключённых приложений
-      final selectedApps = ref.read(selectedAppsProvider);
-      setState(() {
-        _excludedAppsCount = selectedApps.length;
-      });
     });
   }
 
   Future<void> _connect() async {
     if (_busy) return;
-    setState(() {
-      _busy = true;
-      _status = 'Тестирование…';
-      _attemptHistory.clear();
-    });
+    setState(() => _busy = true);
 
-    // Определяем тип сети
-    final platform = ref.read(platformBridgeProvider);
-    final info = await platform.networkInfo();
-    final isMobile = info.type == 'mobile';
+    final controller = ref.read(vpnControllerProvider.notifier);
+    await controller.autoConnect();
 
-    final orchestrator =
-        ref.read(connectionOrchestratorProvider(isMobile));
-
-    final result = await orchestrator.autoConnect(
-      onStatus: (s) {
-        if (mounted) setState(() => _status = s);
-      },
-    );
-
-    if (!mounted) return;
-    setState(() => _busy = false);
-
-    // Добавляем историю попыток в отображение.
-    if (result.attempts.isNotEmpty) {
-      setState(() {
-        _attemptHistory
-          ..clear()
-          ..addAll(result.attempts.map((a) {
-            final ok = a.ok ? 'OK' : 'ОШИБКА';
-            final err = a.error != null ? ' — ${a.error}' : '';
-            return '[${a.methodName}] $ok$err';
-          }));
-      });
-    }
-
-    if (result.success) {
-      setState(() => _status = 'Успех: ${result.methodName}');
-      if (result.publicIp != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Подключено через ${result.methodName}. IP: ${result.publicIp}'),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } else {
-      setState(() => _status = 'Ошибка');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: SizedBox(
-            width: double.infinity,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(result.error ?? 'Не удалось подключиться'),
-                const SizedBox(height: 8),
-                ..._attemptHistory.map((a) => Text(a, style: const TextStyle(fontSize: 12))),
-              ],
-            ),
-          ),
-          duration: const Duration(seconds: 6),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
-    }
+    if (mounted) setState(() => _busy = false);
   }
 
   Future<void> _disconnect() async {
-    await ref.read(vpnControllerProvider.notifier).disconnect();
-    await ref.read(awgSessionProvider.notifier).disconnect();
-    if (mounted) {
-      setState(() {
-        _busy = false;
-        _status = 'Отключено';
-        _attemptHistory.clear();
-      });
-    }
+    if (_busy) return;
+    setState(() => _busy = true);
+
+    final controller = ref.read(vpnControllerProvider.notifier);
+    await controller.disconnect();
+
+    if (mounted) setState(() => _busy = false);
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = ref.watch(vpnControllerProvider);
-    final awg = ref.watch(awgSessionProvider);
     final theme = Theme.of(context);
-    final connected = ui.state == TunnelState.connected || awg.up;
-    final connecting = ui.state == TunnelState.connecting || awg.connecting;
+    final connected = ui.state == TunnelState.connected;
+    final connecting = ui.state == TunnelState.connecting;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('VPN · Smart Connect'),
+        title: const Text('VPN · Mihomo'),
         actions: [
           IconButton(
             tooltip: 'Управление конфигами',
@@ -158,6 +87,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Статус подключения.
+              Text(
+                connected
+                    ? 'Подключено'
+                    : (connecting ? 'Подключение…' : 'Отключено'),
+                style: theme.textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              if (ui.currentServer.isNotEmpty)
+                Text(
+                  connected
+                      ? 'Через ${ui.currentServer}'
+                      : (ui.remark.isNotEmpty ? ui.remark : 'Готово'),
+                  style: theme.textTheme.bodyMedium,
+                ),
+              const SizedBox(height: 24),
               // Большая кнопка подключения.
               GestureDetector(
                 onTap: connecting || _busy
@@ -204,123 +150,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              // Статус подключения.
-              Text(
-                connected
-                    ? 'Подключено'
-                    : (connecting || _busy ? _status : 'Отключено'),
-                style: theme.textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              if (ui.remark.isNotEmpty || awg.configName != null) ...[
-                const SizedBox(height: 4),
-                Text(ui.remark.isNotEmpty ? ui.remark : awg.configName!,
-                    style: theme.textTheme.bodyMedium),
-              ],
-              const SizedBox(height: 8),
-              Text(
-                'Протокол: ${ui.config?.protocol.name ?? (awg.up ? "amneziawg" : "—")}',
-                style: theme.textTheme.bodySmall,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _MetricChip(
-                    icon: Icons.download,
-                    label: 'RX',
-                    value: formatSpeed(ui.state == TunnelState.connected
-                        ? ui.metrics.downloadSpeed
-                        : awg.rxSpeed),
-                  ),
-                  const SizedBox(width: 16),
-                  _MetricChip(
-                    icon: Icons.upload,
-                    label: 'TX',
-                    value: formatSpeed(ui.state == TunnelState.connected
-                        ? ui.metrics.uploadSpeed
-                        : awg.txSpeed),
-                  ),
-                ],
-              ),
-              if (ui.ipAfter != null || awg.publicIp != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'Публичный IP: ${ui.ipAfter ?? awg.publicIp}',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
-              const SizedBox(height: 12),
-              // Индикатор раздельного туннелирования
-              if (_excludedAppsCount > 0)
-                Card(
-                  color: theme.colorScheme.secondaryContainer,
-                  child: ListTile(
-                    leading: const Icon(Icons.error_outline,
-                        color: Colors.orange),
-                    title: Text('Исключено приложений: $_excludedAppsCount',
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: const Text(
-                      'Эти приложения не будут использовать VPN-туннель',
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.edit),
-                      onPressed: () async {
-                        final result = await Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const SplitTunnelingScreen(),
-                          ),
-                        );
-                        if (result != null && result is Set<String>) {
-                          setState(() {
-                            _excludedAppsCount = result.length;
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 8),
-              Text(
-                'Вы можете исключить приложения (банки, Госуслуги и др.) из VPN-туннеля '
-                'в настройках ниже.',
-                style: theme.textTheme.bodySmall,
-              ),
+              // Список серверов.
+              const _ServerList(),
               const SizedBox(height: 24),
-              if (_attemptHistory.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.errorContainer.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('История попыток:',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onErrorContainer,
-                          )),
-                      const SizedBox(height: 6),
-                      ..._attemptHistory.map((a) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(a,
-                            style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
-                      )),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 24),
-              if (connected) ...[
+              // Индикатор раздельного туннелирования.
+              if (ui.state == TunnelState.connected) ...[
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _disconnect,
                   icon: const Icon(Icons.link_off),
                   label: const Text('Отключиться'),
                 ),
+                const SizedBox(height: 16),
               ],
+              TextButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SplitTunnelingScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.apps),
+                label: const Text('Исключённые приложения'),
+              ),
             ],
           ),
         ),
@@ -329,25 +179,84 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-class _MetricChip extends StatelessWidget {
-  const _MetricChip({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
+/// Список серверов из сохранённых профилей.
+class _ServerList extends ConsumerWidget {
+  const _ServerList();
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Icon(icon, size: 20),
-        Text(label, style: Theme.of(context).textTheme.labelSmall),
-        Text(value, style: Theme.of(context).textTheme.bodySmall),
-      ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profilesAsync = ref.watch(profilesProvider);
+
+    return profilesAsync.when(
+      data: (profiles) {
+        if (profiles.isEmpty) {
+          return const Text(
+            'Нет серверов. Добавьте конфиг в управлении.',
+            style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Серверы (${profiles.length}):',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            ...profiles.map((profile) {
+              final flag = _flagForName(profile.name);
+              return ListTile(
+                leading: Text(flag, style: const TextStyle(fontSize: 24)),
+                title: Text(profile.name),
+                subtitle: Text(profile.type.toUpperCase()),
+                trailing: Icon(
+                  profile.enabled
+                      ? Icons.check_circle
+                      : Icons.check_circle_outline,
+                  color: profile.enabled ? Colors.green : Colors.grey,
+                ),
+                onTap: () async {
+                  await ref.read(profileRepositoryProvider).updateProfile(
+                        profile.id,
+                        priority: 0,
+                      );
+                  // Подключаемся к выбранному серверу.
+                  final controller = ref.read(vpnControllerProvider.notifier);
+                  await controller.connect(VpnConfig(
+                    remark: profile.name,
+                    profileType: ProfileType.values.firstWhere(
+                      (p) => p.name == profile.type,
+                      orElse: () => ProfileType.other,
+                    ),
+                    rawConfig: profile.rawConfig,
+                    type: profile.type,
+                  ));
+                },
+              );
+            }),
+          ],
+        );
+      },
+      loading: () => const CircularProgressIndicator(),
+      error: (e, st) => Text('Ошибка загрузки серверов: $e'),
     );
+  }
+
+  String _flagForName(String name) {
+    final upper = name.toUpperCase();
+    const codes = <String, String>{
+      'PL': '🇵🇱', 'NL': '🇳🇱', 'FI': '🇫🇮', 'RU': '🇷🇺', 'US': '🇺🇸',
+      'DE': '🇩🇪', 'FR': '🇫🇷', 'GB': '🇬🇧', 'JP': '🇯🇵', 'SG': '🇸🇬',
+      'HK': '🇭🇰', 'KR': '🇰🇷', 'CA': '🇨🇦', 'AU': '🇦🇺', 'CH': '🇨🇭',
+      'SE': '🇸🇪', 'NO': '🇳🇴', 'DK': '🇩🇰', 'IE': '🇮🇪', 'ES': '🇪🇸',
+      'IT': '🇮🇹', 'PT': '🇵🇹', 'BR': '🇧🇷', 'AR': '🇦🇷', 'MX': '🇲🇽',
+      'IN': '🇮🇳', 'ID': '🇮🇩', 'TH': '🇹🇭', 'VN': '🇻🇳', 'TR': '🇹🇷',
+      'AE': '🇦🇪', 'SA': '🇸🇦', 'IL': '🇮🇱', 'ZA': '🇿🇦', 'EG': '🇪🇬',
+    };
+    for (final entry in codes.entries) {
+      if (upper.contains(entry.key)) return entry.value;
+    }
+    return '🌐';
   }
 }

@@ -2,33 +2,20 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:flutter_vless/flutter_vless.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:vpn_service/core/models/mihomo_config.dart';
 import 'package:vpn_service/core/models/vpn_config.dart';
 import 'package:vpn_service/core/services/clash_yaml_parser.dart';
+import 'package:vpn_service/core/services/mihomo_service.dart';
 import 'package:vpn_service/core/services/profile_parser.dart';
+import 'package:vpn_service/core/services/profile_repository.dart';
 import 'package:vpn_service/core/services/wireguard_parser.dart';
 import 'package:vpn_service/core/services/xray_json_parser.dart';
-import 'package:vpn_service/features/vpn/services/vpn_service.dart';
 
-/// Провайдер сервиса туннеля.
-final vpnServiceProvider = Provider<VpnService>((ref) {
-  final service = VpnService();
-  ref.onDispose(service.dispose);
-  return service;
-});
-
-final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
-  return const FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-  );
-});
-
-/// Состояние подключения для UI.
+/// Состояние подключения Mihomo для UI.
 @immutable
 class VpnUiState {
   const VpnUiState({
@@ -39,6 +26,7 @@ class VpnUiState {
     this.ipBefore,
     this.ipAfter,
     this.config,
+    this.currentServer = '',
   });
 
   final TunnelState state;
@@ -48,6 +36,7 @@ class VpnUiState {
   final String? ipBefore;
   final String? ipAfter;
   final VpnConfig? config;
+  final String currentServer;
 
   VpnUiState copyWith({
     TunnelState? state,
@@ -58,6 +47,7 @@ class VpnUiState {
     String? ipBefore,
     String? ipAfter,
     VpnConfig? config,
+    String? currentServer,
   }) {
     return VpnUiState(
       state: state ?? this.state,
@@ -67,9 +57,45 @@ class VpnUiState {
       ipBefore: ipBefore ?? this.ipBefore,
       ipAfter: ipAfter ?? this.ipAfter,
       config: config ?? this.config,
+      currentServer: currentServer ?? this.currentServer,
     );
   }
 }
+
+/// Состояние туннеля.
+enum TunnelState { disconnected, connecting, connected, error }
+
+/// Метрики туннеля.
+class TunnelMetrics {
+  const TunnelMetrics({
+    this.uploadSpeed = 0,
+    this.downloadSpeed = 0,
+    this.upload = 0,
+    this.download = 0,
+    this.durationSeconds = 0,
+    this.rttMs,
+  });
+
+  final int uploadSpeed;
+  final int downloadSpeed;
+  final int upload;
+  final int download;
+  final int durationSeconds;
+  final int? rttMs;
+}
+
+/// Тип профиля для Mihomo.
+enum ProfileType { vless, awg, clash, xray, other }
+
+/// Провайдер MihomoService.
+final mihomoServiceProvider = Provider<MihomoService>((ref) {
+  return MihomoService();
+});
+
+/// Провайдер ProfileRepository.
+final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
+  return ProfileRepository();
+});
 
 /// Режим раздельного туннелирования.
 enum SplitTunnelMode {
@@ -87,63 +113,55 @@ final selectedAppsProvider =
     StateProvider<Set<String>>((ref) => <String>{});
 
 class VpnController extends Notifier<VpnUiState> {
-  static const _lastProfileKey = 'last_profile';
   static const _subscriptionKey = 'subscription_url';
   static const _splitTunnelModeKey = 'split_tunnel_mode';
   static const _selectedAppsKey = 'split_tunnel_selected_apps';
 
-  VpnService get _service => ref.read(vpnServiceProvider);
-  FlutterSecureStorage get _storage => ref.read(secureStorageProvider);
+  MihomoService get _mihomo => ref.read(mihomoServiceProvider);
+  ProfileRepository get _profiles => ref.read(profileRepositoryProvider);
 
   StreamSubscription? _statusSub;
   bool _autoReconnecting = false;
 
-  /// Режим раздельного туннелирования (загружается из secure storage).
   SplitTunnelMode _splitTunnelMode = SplitTunnelMode.allThroughVpn;
-
-  /// Набор package names, исключённых из VPN (для режима exceptSelected)
-  /// или выбранных для VPN (для режима onlySelected).
   Set<String> _selectedPackages = <String>{};
 
   @override
   VpnUiState build() {
     _statusSub?.cancel();
-    _statusSub = _service.statusStream.listen(_onStatus);
-    ref.onDispose(() => _statusSub?.cancel());
-    // Загружаем настройки раздельного туннелирования при инициализации.
+    _statusSub = _mihomo.stateStream.listen(_onMihomoStatus);
+    ref.onDispose(() {
+      _statusSub?.cancel();
+      _mihomo.dispose();
+    });
     _loadSplitTunnelSettings();
     return const VpnUiState();
   }
 
-  /// Загружает настройки раздельного туннелирования из безопасного хранилища.
+  /// Загружает настройки раздельного туннелирования.
   Future<void> _loadSplitTunnelSettings() async {
-    final storage = ref.read(secureStorageProvider);
-    final modeRaw = await storage.read(key: _splitTunnelModeKey);
-    final pkgsRaw = await storage.read(key: _selectedAppsKey);
+    final prefs = await SharedPreferences.getInstance();
+    final modeRaw = prefs.getString(_splitTunnelModeKey);
+    final pkgsRaw = prefs.getStringList(_selectedAppsKey) ?? <String>[];
 
-    if (modeRaw != null) {
-      try {
-        _splitTunnelMode = SplitTunnelMode.values.firstWhere(
-          (m) => m.index == int.parse(modeRaw),
-          orElse: () => SplitTunnelMode.allThroughVpn,
-        );
-      } on Object {
-        // ignore
-      }
-    }
-    if (pkgsRaw != null && pkgsRaw.isNotEmpty) {
-      _selectedPackages = pkgsRaw.split(',').toSet();
+    if (mounted) {
+      setState(() {
+        if (modeRaw != null) {
+          _splitTunnelMode = SplitTunnelMode.values.firstWhere(
+            (m) => m.index == int.tryParse(modeRaw) ?? 0,
+            orElse: () => SplitTunnelMode.allThroughVpn,
+          );
+        }
+        _selectedPackages = pkgsRaw.toSet();
+      });
     }
   }
 
   /// Сохраняет настройки раздельного туннелирования.
   Future<void> _saveSplitTunnelSettings() async {
-    final storage = ref.read(secureStorageProvider);
-    await storage.write(key: _splitTunnelModeKey, value: _splitTunnelMode.index.toString());
-    await storage.write(
-      key: _selectedAppsKey,
-      value: _selectedPackages.join(','),
-    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_splitTunnelModeKey, _splitTunnelMode.index.toString());
+    await prefs.setStringList(_selectedAppsKey, _selectedPackages.toList());
   }
 
   /// Переключает выбор приложения.
@@ -156,95 +174,90 @@ class VpnController extends Notifier<VpnUiState> {
     await _saveSplitTunnelSettings();
   }
 
-  /// Возвращает список package names, которые должны быть исключены из VPN
-  /// (т.е. НЕ пойдут через туннель).
-  List<String> get excludedAppsForVpnService {
+  /// Возвращает список package names для Mihomo PROCESS-NAME правил.
+  List<String> get excludedAppsForMihomo {
     switch (_splitTunnelMode) {
       case SplitTunnelMode.allThroughVpn:
         return <String>[];
       case SplitTunnelMode.onlySelected:
-        // Только выбранные через VPN → все остальные исключаем.
-        // Для полного списка приложений нужна информация из device_apps,
-        // но здесь у нас только выбранные. Возвращаем пустой список -
-        // приложения из выбранного списка будут идти через VPN,
-        // остальные - нет (логика обрабатывается на UI уровне).
         return <String>[];
       case SplitTunnelMode.exceptSelected:
         return _selectedPackages.toList();
     }
   }
 
-  /// Возвращает список package names, которые ДОЛЖНЫ идти через VPN
-  /// (для режима onlySelected).
-  List<String> get includedAppsForVpnService {
-    switch (_splitTunnelMode) {
-      case SplitTunnelMode.allThroughVpn:
-        return <String>[];
-      case SplitTunnelMode.onlySelected:
-        return _selectedPackages.toList();
-      case SplitTunnelMode.exceptSelected:
-        return <String>[];
-    }
-  }
-
-  void _onStatus(VlessStatus status) {
-    final mapped = switch (status.connectionState) {
-      VlessConnectionState.connected => TunnelState.connected,
-      VlessConnectionState.connecting => TunnelState.connecting,
-      VlessConnectionState.disconnecting => TunnelState.connecting,
-      VlessConnectionState.disconnected => TunnelState.disconnected,
-      VlessConnectionState.unknown => null,
+  void _onMihomoStatus(MihomoUiState state) {
+    final mapped = switch (state.state) {
+      MihomoTunnelState.connected => TunnelState.connected,
+      MihomoTunnelState.connecting => TunnelState.connecting,
+      MihomoTunnelState.disconnected => TunnelState.disconnected,
+      MihomoTunnelState.error => TunnelState.error,
     };
-    if (mapped != null) {
-      state = state.copyWith(state: mapped);
-    }
-    // Тихий fallback: если соединение оборвалось — перезапускаем автопоиск.
-    if (status.connectionState == VlessConnectionState.disconnected &&
-        state.state == TunnelState.disconnected &&
+
+    _currentState = _currentState.copyWith(
+      state: mapped,
+      currentServer: state.currentServer,
+      error: state.error,
+    );
+    state = _currentState;
+
+    // Автоподключение при обрыве.
+    if (state.state == MihomoTunnelState.disconnected &&
+        _currentState.state == TunnelState.disconnected &&
         !_autoReconnecting) {
       _autoReconnecting = true;
       unawaited(Future<void>.delayed(const Duration(seconds: 2), () async {
         _autoReconnecting = false;
-        if (state.state == TunnelState.disconnected) {
+        if (_currentState.state == TunnelState.disconnected) {
           await autoConnect();
         }
       }));
     }
   }
 
-  /// Импортирует профиль (ссылка/JSON/подписка) и запоминает его.
+  VpnUiState _currentState = const VpnUiState();
+
+  /// Импортирует профиль и сохраняет в ProfileRepository (sqflite).
   ///
   /// Порядок разбора:
-  ///  1. WireGuard/AmneziaWG .conf (WGConfigParser)
-  ///  2. Clash YAML (ClashYamlParser) — AmneziaWG и MASQUE
-  ///  3. Xray JSON (XrayJsonParser) — WireGuard + Noise
-  ///  4. vless://, hysteria2://, подписки (ProfileParser)
-  ///  5. Fallback: FlutterVless.parse() (подписки, Clash YAML, sing-box JSON, …)
+  ///  1. WireGuard/AmneziaWG .conf (WGConfigParser) → type 'awg'
+  ///  2. Clash/Mihomo YAML (ClashYamlParser) → type 'clash'
+  ///  3. Xray JSON (XrayJsonParser) → type 'xray'
+  ///  4. vless://, hysteria2://, подписки (ProfileParser) → type 'vless' / 'other'
   Future<VpnConfig?> importProfile(String input) async {
     VpnConfig? config;
+    String? detectedType;
 
     // 1) WireGuard/AmneziaWG .conf
     if (WGConfigParser.looksLikeWireGuardConf(input)) {
       try {
-        config = const WGConfigParser().importConf(input);
+        final wg = const WGConfigParser().parse(input);
+        config = VpnConfig(
+          remark: wg.name,
+          profileType: ProfileType.awg,
+          rawConfig: input,
+          xrayJson: '', // Mihomo генерирует конфиг из rawConfig
+          type: 'awg',
+        );
+        detectedType = 'awg';
       } on WGConfigParseException catch (e) {
         state = state.copyWith(error: 'WireGuard-конфиг: ${e.message}');
         return null;
       }
     }
 
-    // 2) Clash YAML — AmneziaWG / MASQUE
+    // 2) Clash/Mihomo YAML
     if (config == null && ClashYamlParser.looksLikeClashYaml(input)) {
       try {
         final clashConfigs = const ClashYamlParser().parse(input);
         if (clashConfigs.isNotEmpty) {
           config = clashConfigs.first;
-          // MASQUE требует Sing-box — предупреждаем пользователя.
+          detectedType = 'clash';
           if (ClashYamlParser.isMasque(config)) {
             state = state.copyWith(
               error:
                   'MASQUE требует поддержку Sing-box. '
-                  'Установите sing-box или используйте другой протокол.',
+                  'Используйте другой протокол.',
             );
             return null;
           }
@@ -259,6 +272,7 @@ class VpnController extends Notifier<VpnUiState> {
     if (config == null && XrayJsonParser.looksLikeWireGuardXrayJson(input)) {
       try {
         config = const XrayJsonParser().parse(input);
+        detectedType = 'xray';
       } on XrayJsonParseException catch (e) {
         state = state.copyWith(error: 'Xray JSON: ${e.message}');
         return null;
@@ -269,8 +283,10 @@ class VpnController extends Notifier<VpnUiState> {
     if (config == null) {
       try {
         config = const ProfileParser().parseOne(input);
+        detectedType = config.protocol == ProfileProtocol.vless ? 'vless' : 'other';
       } on Object {
         config = _parseWithPlugin(input);
+        detectedType = 'other';
       }
     }
 
@@ -278,145 +294,105 @@ class VpnController extends Notifier<VpnUiState> {
       state = state.copyWith(error: 'Импорт не удался: формат не распознан');
       return null;
     }
-    await _storage.write(key: _lastProfileKey, value: config.toJsonString());
+
+    // Сохраняем в ProfileRepository (sqflite)
+    final entity = ProfileEntity(
+      id: config.remark.hashCode.toString(),
+      name: config.remark,
+      rawConfig: input,
+      type: detectedType ?? 'other',
+      priority: 0,
+      enabled: true,
+    );
+    await _profiles.saveProfile(entity);
+
     state = state.copyWith(remark: config.remark, clearError: true);
     return config;
   }
 
-  /// Сохраняет уже разобранный профиль (например, из .conf-импорта)
-  /// без повторного парсинга.
-  Future<void> saveProfile(VpnConfig config) async {
-    await _storage.write(key: _lastProfileKey, value: config.toJsonString());
-    state = state.copyWith(remark: config.remark, clearError: true);
-  }
-
   VpnConfig? _parseWithPlugin(String input) {
+    // Fallback: попробуем как sing-box JSON напрямую
     try {
-      final parsed = FlutterVless.parse(input);
-      return VpnConfig(
-        remark: parsed.remark,
-        protocol: ProfileProtocol.other,
-        xrayJson: parsed.getFullConfiguration(),
-      );
-    } on Object {
-      return null;
-    }
-  }
-
-  Future<VpnConfig?> restoreLast() async {
-    final raw = await _storage.read(key: _lastProfileKey);
-    if (raw == null) return null;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        return VpnConfig.fromJson(decoded);
+      final decoded = jsonDecode(input) as Map<String, dynamic>?;
+      if (decoded != null && decoded.containsKey('outbounds')) {
+        return VpnConfig(
+          remark: 'Mihomo JSON',
+          profileType: ProfileType.other,
+          rawConfig: input,
+          xrayJson: input,
+          type: 'other',
+        );
       }
     } on Object {
-      // повреждённое хранилище — молча игнорируем
+      // ignore
     }
     return null;
   }
 
-  /// Запускает туннель по профилю. Бросает исключение при небезопасном конфиге.
-  Future<void> connect(VpnConfig config) async {
-    state = state.copyWith(state: TunnelState.connecting, clearError: true);
-    try {
-      await _service.initialize();
-      // CONNECTED может наступить сразу после start(), подписываемся заранее.
-      final connected = Completer<void>();
-      late final StreamSubscription<VlessStatus> sub;
-      sub = _service.statusStream.listen((s) {
-        if (s.connectionState == VlessConnectionState.connected &&
-            !connected.isCompleted) {
-          connected.complete();
-        }
-      });
-      try {
-        await _service.start(config);
-        state = state.copyWith(
-          state: TunnelState.connecting,
-          remark: config.remark,
-          config: config,
-        );
-        // Проверка реального трафика после установления соединения.
-        unawaited(_verifyTraffic(connected).whenComplete(sub.cancel));
-      } catch (_) {
-        await sub.cancel();
-        rethrow;
-      }
-    } on Object catch (e) {
-      state = state.copyWith(state: TunnelState.error, error: '$e');
-    }
+  /// Восстанавливает последний активный профиль из репозитория.
+  Future<VpnConfig?> restoreLast() async {
+    final profiles = await _profiles.getAllProfiles();
+    if (profiles.isEmpty) return null;
+    final last = profiles.first;
+    return VpnConfig(
+      remark: last.name,
+      profileType: ProfileType.values.firstWhere(
+        (p) => p.name == last.type,
+        orElse: () => ProfileType.other,
+      ),
+      rawConfig: last.rawConfig,
+      xrayJson: last.rawConfig,
+      type: last.type,
+    );
   }
 
-  /// Запускает каскадный туннель: сначала до российского сервера, затем
-  /// трафик перенаправляется на зарубежный сервер через первый туннель.
-  Future<void> connectCascade(VpnConfig config) async {
-    state = state.copyWith(state: TunnelState.connecting, clearError: true);
+  /// Запускает туннель Mihomo по профилю.
+  Future<void> connect(VpnConfig config) async {
+    _currentState = state.copyWith(state: TunnelState.connecting, clearError: true);
+    state = _currentState;
+
     try {
-      await _service.initialize();
-
-      // Сначала подключаемся к промежуточному серверу (Россия)
-      final outbound1 = config.cascadeOutbound1;
-      if (outbound1 == null) {
-        throw Exception('Каскадный конфиг без промежуточного сервера');
-      }
-
-      await _service.startCascade(config);
-
-      state = state.copyWith(
-        state: TunnelState.connecting,
-        remark:
-            '${config.remark} (каскад: ${outbound1.remark} → ${config.cascadeOutbound2?.remark ?? 'цель'})',
-        config: config,
+      final mihomoJson = MihomoService.generateMihomoConfig(
+        rawConfig: config.rawConfig,
+        configType: config.type,
+        excludedApps: excludedAppsForMihomo,
       );
 
-      // Проверка реального трафика после установления соединения.
-      unawaited(_verifyTraffic(Completer<void>()..complete()).whenComplete(() {}));
-    } on Object catch (e) {
-      state = state.copyWith(state: TunnelState.error, error: '$e');
-    }
-  }
+      await _mihomo.start(mihomoJson);
 
-  /// Запускает CIDR-маршрутизацию: трафик только к указанным IP-адресам
-  /// проходит через VPN, остальной — напрямую.
-  Future<void> connectCidr(VpnConfig config) async {
-    state = state.copyWith(state: TunnelState.connecting, clearError: true);
-    try {
-      await _service.initialize();
-
-      // Для CIDR-маршрутизации поднимаем туннель с чёрной дырой (blackhole)
-      // и настраиваем правила маршрутизации для указанных CIDR
-      await _service.startCidr(config);
-
-      state = state.copyWith(
+      _currentState = _currentState.copyWith(
         state: TunnelState.connecting,
         remark: config.remark,
         config: config,
       );
-
-      // Проверка реального трафика
-      unawaited(_verifyTraffic(Completer<void>()..complete()).whenComplete(() {}));
+      state = _currentState;
     } on Object catch (e) {
-      state = state.copyWith(state: TunnelState.error, error: '$e');
+      _currentState = _currentState.copyWith(
+        state: TunnelState.error,
+        error: '$e',
+      );
+      state = _currentState;
     }
   }
 
+  /// Автоподключение: Mihomo сам выбирает лучший сервер через url-test.
   Future<void> autoConnect({String? subscription}) async {
-    final input = subscription ??
-        await _storage.read(key: _subscriptionKey) ??
-        '';
-    state = state.copyWith(
+    final prefs = await SharedPreferences.getInstance();
+    final input = subscription ?? prefs.getString(_subscriptionKey) ?? '';
+
+    _currentState = state.copyWith(
       state: TunnelState.connecting,
-      remark: 'Поиск сервера…',
+      remark: 'Поиск лучшего сервера…',
       clearError: true,
     );
+    state = _currentState;
 
     List<VpnConfig> configs = <VpnConfig>[];
+
     if (input.startsWith('http://') || input.startsWith('https://')) {
-      final client = http.Client();
+      // Подписка по URL
       try {
-        final resp = await client
+        final resp = await http.Client()
             .get(Uri.parse(input))
             .timeout(const Duration(seconds: 15));
         if (resp.statusCode == 200) {
@@ -424,8 +400,6 @@ class VpnController extends Notifier<VpnUiState> {
         }
       } on Object {
         // ignore
-      } finally {
-        client.close();
       }
     } else if (input.isNotEmpty) {
       try {
@@ -436,104 +410,60 @@ class VpnController extends Notifier<VpnUiState> {
     }
 
     if (configs.isEmpty) {
-      final last = await restoreLast();
-      if (last != null) configs = <VpnConfig>[last];
+      final allProfiles = await _profiles.getAllProfiles();
+      if (allProfiles.isNotEmpty) {
+        configs = allProfiles.map((p) {
+          return VpnConfig(
+            remark: p.name,
+            profileType: ProfileType.values.firstWhere(
+              (t) => t.name == p.type,
+              orElse: () => ProfileType.other,
+            ),
+            rawConfig: p.rawConfig,
+            xrayJson: p.rawConfig,
+            type: p.type,
+          );
+        }).toList(growable: false);
+      }
     }
 
     if (configs.isEmpty) {
-      state = state.copyWith(
+      _currentState = state.copyWith(
         state: TunnelState.error,
-        error: 'Нет конфигураций. Вставьте подписку или конфиг.',
+        error: 'Нет конфигураций. Загрузите Clash YAML или .conf.',
       );
+      state = _currentState;
       return;
     }
 
-    // Probe: замеряем задержку, отбрасываем недоступные. Общий таймаут 15 с.
-    List<(VpnConfig, int?)> probed;
-    try {
-      probed = await Future.wait(
-        configs.map((c) async {
-          final delay = await _service.probeDelay(c);
-          return (c, delay);
-        }),
-      ).timeout(const Duration(seconds: 15));
-    } on TimeoutException {
-      state = state.copyWith(
-        state: TunnelState.error,
-        error: 'Не удалось найти рабочий сервер за 15 с. '
-            'Проверьте конфиг или смените сеть (на мобильном интернете '
-            'AmneziaWG может блокироваться).',
+    // Mihomo url-test сам выберет лучший сервер. Сохраняем все профили
+    // и подключаемся к первому (Mihomo внутренне переключит на лучший).
+    for (final c in configs) {
+      final entity = ProfileEntity(
+        id: c.remark.hashCode.toString(),
+        name: c.remark,
+        rawConfig: c.rawConfig,
+        type: c.type,
+        priority: configs.indexOf(c),
+        enabled: true,
       );
-      return;
+      await _profiles.saveProfile(entity);
     }
 
-    final viable = probed.where((p) => p.$2 != null).toList()
-      ..sort((a, b) => a.$2!.compareTo(b.$2!));
-
-    if (viable.isEmpty) {
-      for (final c in configs) {
-        try {
-          await connect(c);
-          if (state.state == TunnelState.connected) return;
-        } on Object {
-          continue;
-        }
-      }
-      state = state.copyWith(
-        state: TunnelState.error,
-        error: 'Не удалось найти рабочий сервер. Проверьте конфиг или '
-            'смените сеть (на мобильном интернете AmneziaWG может '
-            'блокироваться).',
-      );
-      return;
-    }
-
-    for (final entry in viable) {
-      try {
-        await connect(entry.$1);
-        if (state.state == TunnelState.connected) return;
-      } on Object {
-        continue;
-      }
-    }
-    if (state.state != TunnelState.connected) {
-      state = state.copyWith(
-        state: TunnelState.error,
-        error: 'Не удалось подключиться ни к одному серверу. Проверьте '
-            'конфиг или смените сеть (на мобильном интернете AmneziaWG '
-            'может блокироваться).',
-      );
-    }
+    await connect(configs.first);
   }
 
   Future<void> setSubscription(String url) async {
-    await _storage.write(key: _subscriptionKey, value: url);
-  }
-
-  Future<void> _verifyTraffic(Completer<void> connected) async {
-    try {
-      await connected.future.timeout(const Duration(seconds: 30));
-    } on TimeoutException {
-      state = state.copyWith(
-        error: 'Таймаут подключения: состояние CONNECTED не достигнуто',
-      );
-      return;
-    }
-    final changed = await _service.verifyRealTraffic();
-    final after = await _service.fetchPublicIp();
-    state = state.copyWith(ipAfter: after);
-    if (changed == false) {
-      state = state.copyWith(
-        error: 'Handshake прошёл, но IP не изменился — метод отклонён',
-      );
-    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_subscriptionKey, url);
   }
 
   Future<void> disconnect() async {
     try {
-      await _service.stop();
+      await _mihomo.stop();
     } finally {
-      state = state.copyWith(state: TunnelState.disconnected);
+      _currentState = state.copyWith(state: TunnelState.disconnected);
+      state = _currentState;
     }
   }
 }
