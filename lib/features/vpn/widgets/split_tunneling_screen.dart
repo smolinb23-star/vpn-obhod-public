@@ -266,7 +266,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
                 label: Text(_saving ? '...' : 'Сохранить'),
               ),
             ),
-      ),
     );
   }
 
@@ -296,7 +295,7 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
 /// Режим раздельного туннелирования.
 enum SplitTunnelMode {
   allThroughVpn, // Все через VPN
-  onlySelected,  // Только выбранные приложения через VPN
+  onlySelected, // Только выбранные приложения через VPN
   exceptSelected, // Все кроме выбранных через VPN
 }
 

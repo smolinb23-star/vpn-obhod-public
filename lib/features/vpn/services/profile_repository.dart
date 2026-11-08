@@ -80,7 +80,7 @@ class ProfileRepository {
   }
 
   static String get _pathSeparator {
-    if (Platform.isWindows) return '\\';
+    if (Platform.isWindows) return '\\\\';
     return '/';
   }
 

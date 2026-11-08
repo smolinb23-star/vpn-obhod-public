@@ -112,9 +112,6 @@ class ConnectionOrchestrator {
   /// История попыток для отображения в UI.
   final List<MethodAttemptLog> _attemptLogs = [];
 
-  /// Сохранённые конфиги в flutter_secure_storage:
-  //  - 'saved_configs' — JSON Map: id -> {type, name, data}
-
   /// Список кандидатов для подключения в порядке приоритета.
   Future<List<ConnectionCandidate>> _buildCandidates() async {
     final all = await _getAllSavedConfigsMap();

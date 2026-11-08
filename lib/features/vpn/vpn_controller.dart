@@ -72,7 +72,7 @@ class VpnUiState {
 /// Режим раздельного туннелирования.
 enum SplitTunnelMode {
   allThroughVpn, // Все через VPN
-  onlySelected,  // Только выбранные приложения через VPN
+  onlySelected, // Только выбранные приложения через VPN
   exceptSelected, // Все кроме выбранных через VPN
 }
 
