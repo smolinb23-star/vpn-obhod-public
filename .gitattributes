@@ -1,0 +1,6 @@
+# Переводы строк: shell-скрипты всегда LF (CI на Linux)
+* text=auto eol=lf
+*.bat text eol=crlf
+*.jar binary
+*.png binary
+*.keystore binary
