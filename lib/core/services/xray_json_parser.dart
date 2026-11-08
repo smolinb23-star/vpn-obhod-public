@@ -11,15 +11,13 @@ class XrayJsonParseException implements Exception {
   String toString() => message;
 }
 
-/**
- * Парсер Xray JSON конфигураций.
- *
- * Поддерживает:
- *  1. WireGuard outbound (protocol: "wireguard") — извлекает secretKey,
- *     publicKey, endpoint, address и конвертирует в WireGuardConfig.
- *  2. Noise-параметры (deXrayWARP стиль) — передаются как-is в xrayJson,
- *     так как Xray-ядро умеет генерировать шум для обхода DPI.
- */
+/// Парсер Xray JSON конфигураций.
+///
+/// Поддерживает:
+///  1. WireGuard outbound (protocol: "wireguard") — извлекает secretKey,
+///     publicKey, endpoint, address и конвертирует в WireGuardConfig.
+///  2. Noise-параметры (deXrayWARP стиль) — передаются как-is в xrayJson,
+///     так как Xray-ядро умеет генерировать шум для обхода DPI.
 class XrayJsonParser {
   const XrayJsonParser();
 

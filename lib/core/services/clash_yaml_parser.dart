@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:vpn_service/core/models/vpn_config.dart';
-import 'package:vpn_service/core/models/wireguard_config.dart';
 import 'package:vpn_service/core/services/app_log.dart';
 import 'package:yaml/yaml.dart';
 
@@ -13,40 +12,38 @@ class ClashYamlParseException implements Exception {
   String toString() => message;
 }
 
-/**
- * Парсер Clash YAML конфигураций.
- *
- * Ожидаемая структура (для AmneziaWG):
- *   proxies:
- *     - name: "Амнезия"
- *       type: wireguard  # или amneziawg
- *       server: 1.2.3.4
- *       port: 51820
- *       private-key: <base64>
- *       public-key: <base64>
- *       amnezia-wg-option:
- *         Jc: "128"
- *         Jmin: "16"
- *         Jmax: "32"
- *         S1: "0"
- *         S2: "0"
- *         H1: "1"
- *         H2: "2"
- *         H3: "3"
- *         H4: "4"
- *         I1: "abc..."
- *         I2: "def..."
- *         I3: "ghi..."
- *         I4: "jkl..."
- *         I5: "mno..."
- *
- * Для MASQUE:
- *   proxies:
- *     - name: "Masque"
- *       type: masque
- *       server: example.com
- *       port: 443
- */
+/// Парсер Clash YAML конфигураций.
+///
+/// Ожидаемая структура (для AmneziaWG):
+///   proxies:
+///     - name: "Амнезия"
+///       type: wireguard  # или amneziawg
+///       server: 1.2.3.4
+///       port: 51820
+///       private-key: <base64>
+///       public-key: <base64>
+///       amnezia-wg-option:
+///         Jc: "128"
+///         Jmin: "16"
+///         Jmax: "32"
+///         S1: "0"
+///         S2: "0"
+///         H1: "1"
+///         H2: "2"
+///         H3: "3"
+///         H4: "4"
+///         I1: "abc..."
+///         I2: "def..."
+///         I3: "ghi..."
+///         I4: "jkl..."
+///         I5: "mno..."
+///
+/// Для MASQUE:
+///   proxies:
+///     - name: "Masque"
+///       type: masque
+///       server: example.com
+///       port: 443
 class ClashYamlParser {
   const ClashYamlParser();
 
