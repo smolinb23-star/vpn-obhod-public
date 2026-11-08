@@ -1,11 +1,11 @@
 {
-  "stage": 4.2,
-  "stage_status": "done_mobile_priority_apk_delivered",
+  "stage": 4.3,
+  "stage_status": "done_native_app_picker_clash_yaml_xray_json_apk_delivered",
   "apk": {
     "local": "dist/app-release.apk",
-    "size_bytes": 104517972,
-    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-6cab7d863774ae31f6e717d3603e1ecabe617d55",
-    "ci_run": 42494311956,
+    "size_bytes": 0,
+    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-55f8ee15db3cf491ba4bc0edf3651c5ab985dd66",
+    "ci_run": 42507600505,
     "signing": "debug (release keystore — MANUAL)",
     "magic": "PK ZIP",
     "native_libs": "libam-go.so + libam-quick.so + libam.so (AWG) + libxray.so (VLESS) для arm64-v8a/armeabi-v7a/x86_64"
@@ -21,7 +21,8 @@
     "public_12": "SUCCESS 546f4f8 (3.3 DPI fix: dead_code, duplicate MTU dropdown; analyze + 92 dart + 9 kotlin) -> APK 101767454",
     "public_14": "SUCCESS bc23db7 (3.4 Smart Auto-Connect: ConnectionOrchestrator + ConfigManagementScreen + упрощённый HomeScreen; analyze + 92 dart + 9 kotlin + apk) -> APK 101738662",
     "public_15": "SUCCESS 96e09e4 (3.4 Smart Auto-Connect final: I11 IP timeout 10с, post-connect delay 3с, 3 IP retry attempts, fallback endpoints, mobile VLESS priority, attempt history UI, cascade/CDN/CIDR bypass configs; analyze + 92 dart + 9 kotlin + apk) -> APK 101756662",
-    "public_16": "SUCCESS 5f46fd4 (3.4.1 Split Tunneling: device_apps dependency, SplitTunnelingScreen UI, excludedApps in VpnService.start(), PROGRESS/STATE updated; analyze + 92 dart + 9 kotlin + apk) -> APK 101756662"
+    "public_16": "SUCCESS 5f46fd4 (3.4.1 Split Tunneling: device_apps dependency, SplitTunnelingScreen UI, excludedApps in VpnService.start(), PROGRESS/STATE updated; analyze + 92 dart + 9 kotlin + apk) -> APK 101756662",
+    "public_17": "SUCCESS 55f8ee1 (Этап 4.3: нативный App Picker через PlatformBridge.getInstalledApps() (PackageManager, JSON с base64-иконками), ClashYamlParser (proxies→WireGuardConfig, amnezia-wg-option), XrayJsonParser (wireguard JSON с шумом), WGConfigParser/AwgConfBuilder расширены (I2-I5, ContentPaddingAddition, RekeyAfterTime, RejectAfterTime, MaxHandshakeAttempts), MASQUE→требует Sing-box; analyze + 92 dart + 9 kotlin + apk) -> APK TBD"
   },
   "chosen_branches": {
     "vpn_core": "flutter_vless ^1.1.7",
@@ -133,5 +134,5 @@
     "ui": "ConfImportScreen (иконка-скрепка в AppBar HomeScreen), также вставка .conf текстом",
     "gotcha": "Dart base64Decode отвергает неканонические ключи — тестовые ключи должны быть каноническим base64 от 32 случайных байт"
   },
-  "next_step": "Этап 4.2 завершён (Приоритизация методов для мобильных сетей: VLESS Reality → VLESS XHTTP → CIDR → Hysteria2 → AmneziaWG (последний); экран «Исключённые приложения» с ручным вводом пакетов, тремя режимами; сохранение в flutter_secure_storage; новые тесты проходят). Дальше: проверка на телефоне (одна кнопка, авто-подбор протокола, YouTube/Gemini), затем Этап 5 (звонки peer_rtc + Opus, офлайн-сообщения flutter_mesh_network, чат UI)"
+  "next_step": "Этап 4.3 завершён. Проверить на телефоне: нативный список приложений с иконками (не пустое поле), импорт Clash YAML с amnezia-wg-option (подключение через AmneziaWG), импорт Xray JSON с wireguard (подключение через WireGuard/Noise). Затем Этап 5 (звонки peer_rtc + Opus, офлайн-сообщения flutter_mesh_network, чат UI)"
 }
