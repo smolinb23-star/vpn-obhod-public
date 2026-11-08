@@ -41,11 +41,11 @@ class XrayJsonParser {
   /// Разбирает Xray JSON с WireGuard outbound и возвращает VpnConfig.
   ///
   /// Извлекает:
- *   - settings.secretKey → приватный ключ
- *   - settings.peers[].publicKey → публичный ключ пира
- *   - settings.peers[].endpoint → хост:порт
- *   - settings.address → адреса интерфейса
- *   - shapings/noise → передаются в xrayJson как-is
+  ///   - settings.secretKey → приватный ключ
+  ///   - settings.peers[].publicKey → публичный ключ пира
+  ///   - settings.peers[].endpoint → хост:порт
+  ///   - settings.address → адреса интерфейса
+  ///   - shapings/noise → передаются в xrayJson как-is
   VpnConfig parse(String content, {String fallbackName = 'WireGuard'}) {
     final log = <String>[];
 
@@ -141,7 +141,7 @@ class XrayJsonParser {
   }
 
   (String, int?) _splitEndpoint(String? value) {
-    if (value == null || value.isEmpty) return (null, null);
+    if (value == null || value.isEmpty) return (null, null as int?);
     final v = value.trim();
     if (v.startsWith('[')) {
       final close = v.indexOf(']');
