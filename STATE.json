@@ -1,0 +1,143 @@
+{
+  "stage": 3.3,
+  "stage_status": "in_progress_core_stability_apk_pending",
+  "apk": {
+    "local": "dist/app-release.apk",
+    "size_bytes": 101855338,
+    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-941925bd7420d1c8c88f7a53c3ee705504c559ab",
+    "ci_run": 42430940513,
+    "signing": "debug (release keystore — MANUAL)",
+    "magic": "PK ZIP",
+    "native_libs": "libam-go.so + libam-quick.so + libam.so (AWG) + libxray.so (VLESS) для arm64-v8a/armeabi-v7a/x86_64"
+  },
+  "repos": {
+    "private": "smolinb23-star/vpn-obhod (заблокирован GitHub API 403 trade controls — token в истории, Push Protection не пропустит)",
+    "public": "smolinb23-star/vpn-obhod-public (orphan-история без PAT, пуш .tools/push_clean.py)"
+  },
+  "network_note": "Скачивание Actions-артефактов недоступно (*.blob.core.windows.net блокируется сетью) — workflow дублирует APK в GitHub Release (objects.githubusercontent.com проходит)",
+  "ci_builds": {
+    "1": "FAIL AGP 8.7.3",
+    "2": "FAIL gradle wrapper",
+    "3": "FAIL shrinkResources -> fixed ef86904",
+    "public_1": "SUCCESS 247c416 (analyze+24 tests+apk)",
+    "public_2": "SUCCESS 2755859 (+Release publish) -> APK скачан",
+    "public_3": "SUCCESS 6163d29 (orphan mirror без PAT) -> финальный APK",
+    "public_4": "FAIL 3b50940 (тесты: неканонический base64 в тестовых PSK)",
+    "public_5": "SUCCESS be016a6 (+.conf import, 43 теста) -> APK 88090819",
+    "public_6": "FAIL dcc362c/af168b0/d5df747 (analyze warnings)",
+    "public_7": "FAIL 313d959 (META-INF OSGI merge clash)",
+    "public_8": "SUCCESS 766e0b4 (нативный AmneziaWG, 50 dart + 8 kotlin) -> APK 100955110",
+    "public_9": "SUCCESS 941925b (3.1+3.2: импорт .conf, диагностика, 79 dart) -> APK 101855338; kotlin unit tests падали на имени теста, исправлено после"
+  },
+  "build_mode": "github_actions",
+  "chosen_branches": {
+    "vpn_core": "flutter_vless ^1.1.7",
+    "parser": "pure_dart_primary + FlutterVless.parse fallback",
+    "ci": "subosito/flutter-action@v2 stable, JDK21, ubuntu-latest, artifact v4 + Release publish",
+    "bypass_methods": "mock (детерминированные по seed) — боевые провайдеры подключаются заменой bypassMethodsProvider",
+    "wins_storage": "SqliteWinsRepository.openDefault() в main(); InMemory fallback"
+  },
+  "manual_required": [
+    {
+      "id": "revoke_token",
+      "task": "ОТЗВАТЬ PAT в GitHub Settings → Developer settings → PAT classic. Токен прошёл через чат — компрометация. В публичном репо отсутствует (orphan-коммит)."
+    },
+    {
+      "id": "install_apk",
+      "task": "Установить dist/app-release.apk на Android-устройство (debug-подпись, allow unknown sources) и проверить: импорт .conf из файла и вставкой, rx/tx, «Проверить IP», MTU/DNS"
+    },
+    {
+      "id": "release_signing",
+      "task": "После подтверждения работы: keytool -genkeypair, секреты в gh secret set KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD"
+    },
+    {
+      "id": "vps",
+      "task": "VPS с Xray (VLESS Reality) — для боевых методов обхода"
+    }
+  ],
+  "contracts": {
+    "BypassMethod": "id, name, mock, isAvailable(), probe()->ProbeResult{success,latencyMs,realIpChanged,error}, connect(), disconnect(), healthStream",
+    "BypassOrchestrator": "start(networkKey), stop(), setManualOverride(id|null), onHealthSample(h), state/active/probeRounds, stateStream/activeStream",
+    "TrafficVerifier": "verifyTraffic() -> bool? (true=IP изменился, false=не идёт, null=неизвестно)",
+    "WinsRepository": "winsFor/recordWin/bestMethodFor(networkKey); SQLite: bypass_wins(method_id,network_key,wins,last_success_ts)",
+    "VpnService": "initialize/start/stop/statusStream/metricsStream/fetchPublicIp/verifyRealTraffic/probeDelay",
+    "AwgSessionController": "connect(cfg)/disconnect/checkIp/setMtu/setForceDefaultDns/reconnect; phase/rx/tx/speeds/health/ipBefore/publicIp/mtu/forceDefaultDns",
+    "AwgConnectPlan": "create(cfg, mtu, forceDefaultDns, resolver) -> resolved endpoint IPv4, DNS default 1.1.1.1/1.0.0.1, notes"
+  },
+  "orchestrator_params": {
+    "probe_timeout_s": 8,
+    "degraded_rtt_ms": 300,
+    "degraded_loss_ratio": 0.02,
+    "hysteresis_samples": 3,
+    "dead_samples": 3,
+    "dwell_min": 5
+  },
+  "tests": {
+    "dart_total": 79,
+    "profile_parser": 8,
+    "config_validator": 8,
+    "bypass_orchestrator": 8,
+    "wireguard_parser": 18,
+    "wireguard_parser_robustness": 9,
+    "awg_native_service": 8,
+    "awg_connect_plan": 8,
+    "health_monitor": 5,
+    "network_key": 4,
+    "app_log": 3,
+    "kotlin_AwgConfBuilder": 8
+  },
+  "native_awg": {
+    "library": "com.zaneschepke:amneziawg-android:2.3.7 (org.amnezia.awg GoBackend + libam-go.so, minSdk 24)",
+    "channel": "MethodChannel 'dev.local.vpnservice/awg': prepare/connect/disconnect/getStatus + native event onStatus",
+    "kotlin": "AwgBridge.kt (GoBackend.setState UP/DOWN, VpnService.prepare via startActivityForResult), AwgConfBuilder.kt (payload -> канонический AWG .conf, чистая функция + junit-тесты)",
+    "dart": "lib/features/vpn/services/awg_native_service.dart (AwgNativeService + awgNativeServiceProvider/awgStatusProvider), WireGuardConfig.toNativePayload()",
+    "ui": "ConfImportScreen: «Подключить через AmneziaWG» (натив, полная обфускация) + fallback «через Xray (без обфускации)»",
+    "build_fix": "packaging.resources.excludes += META-INF/versions/9/OSGI-INF/MANIFEST.MF и др. (дубли от okhttp 5.x внутри amneziawg-android)",
+    "verification": "APK содержит libam-go.so (8.6 МБ arm64); AndroidManifest содержит AbstractBackend$VpnService + BIND_VPN_SERVICE (мерж из AAR)"
+  },
+  "stage_3_1": {
+    "file_picker": "FileType.any + ручная проверка расширения .conf (fallback: looksLikeWireGuardConf по содержимому)",
+    "permissions": "permission_handler: Permission.storage только Android <= 12; на 13+ SAF разрешений не требует; Permission.notification перед connect",
+    "parser": "WGConfigParser: регистронезависимые ключи/секции, AmneziaJc/amneziajmin→jc/jmin, inline # и ; комментарии, BOM, base64 без padding/URL-safe, неизвестные ключи/секции → warnings, маскирование PrivateKey/PresharedKey в logSink",
+    "paste_fallback": "TextField + «Разобрать вставленный текст» — обходит любые SAF-проблемы",
+    "logs": "AppLog ring buffer 500 строк + нативный logcat своего PID → LogExportService.share() (share_plus), кнопка-жук в AppBar ConfImportScreen",
+    "ui": "ConfImportScreen + AwgStatusPanel встроена на Home и Import"
+  },
+  "stage_3_2": {
+    "counters": "rx/tx байты из GoBackend.getStatistics, пакеты из /proc/net/dev, polling 1 с, speed = delta",
+    "ip_check": "api.ipify.org, исходный IP сохраняется до connect (ipBefore), «Проверить IP» в AwgStatusPanel",
+    "mtu": "1280/1380/1420 (default 1280) в UI, persisted, применяется к payload/conf",
+    "dns_override": "если DNS пуст/0.0.0.0 → 1.1.1.1 + 1.0.0.1; switch принудительного override",
+    "endpoint_resolve": "AwgConnectPlan: домен → IPv4 (InternetAddress.lookup, предпочтение IPv4) до поднятия туннеля; ошибка резолва не блокирует connect",
+    "health": "HealthMonitor 15 с: Degraded RTT>300 мс / loss>2% (3 замера), Dead 3 фейла, dwell 5 мин, гистерезис"
+  },
+  "stage_3_3": {
+    "status": "in_progress",
+    "done": [
+      "TunnelKeepAliveService.kt: START_STICKY, stopWithTask=false, постоянное уведомление, foregroundServiceType=specialUse; stop через stopService; флаг tunnelUp — после перезапуска процесса сервис не показывает ложное уведомление",
+      "AwgSessionController: авто-реконнект при падении туннеля и health=Dead, 3 попытки с задержкой 3/6/9 с, сохранённый .conf в flutter_secure_storage",
+      "PlatformBridge.forceLte(): preferred_network_mode=11 через WRITE_SECURE_SETTINGS, SecurityException → needsPermission + ADB-инструкция в диалоге HomeScreen",
+      "SqliteWinsRepository.openDefault() в main(); таблица bypass_wins(method_id, network_key, wins, last_success_ts); InMemory fallback",
+      "HealthMonitor 15 с: Degraded RTT>300 мс/потери>2%, Dead 3 фейла, dwell 5 мин, гистерезис 3 замера",
+      "счётчики rx/tx 1 с и панель AwgStatusPanel"
+    ],
+    "pending": [
+      "детектор смены сети: networkInfo раз в 5 с при up → авто-реконнект (после звонка Wi-Fi↔LTE)",
+      "workflow: flutter build apk --release --split-per-abi + публикация всех *.apk в Release",
+      "workflow: kotlin unit tests сделать блокирующими (убрать continue-on-error)",
+      "dev_dependency sqflite_common_ffi + test/sqlite_wins_repository_test.dart",
+      "коммит → orphan-пуш .tools/push_clean.py → CI → скачать APK (arm64-v8a) в dist/",
+      "обновить PROGRESS/STATE после зелёного CI"
+    ],
+    "kotlin_test_fix": "AwgConfBuilderTest.kt: `equivalence:` заменено на `equivalence -` (двоеточие недопустимо в имени метода)"
+  },
+  "conf_import": {
+    "plugin": "file_picker ^8.3.7 (8.x совместим с Dart SDK 3.2)",
+    "parser": "WGConfigParser: lib/core/services/wireguard_parser.dart, модель WireGuardConfig",
+    "tunnel": "основной путь — нативный AmneziaWG (native_awg); Xray wireguard-outbound остался как fallback-кнопка (plain WG, без обфускации)",
+    "amnezia_extensions": "Jc/Jmin/Jmax/H1-H4/S1/S2 сохраняются в cfg.amnezia, применяются нативным движком",
+    "ui": "ConfImportScreen (иконка-скрепка в AppBar HomeScreen), также вставка .conf текстом",
+    "gotcha": "Dart base64Decode отвергает неканонические ключи — тестовые ключи должны быть каноническим base64 от 32 случайных байт"
+  },
+  "next_step": "Продолжить Этап 3.3: 1) .github/workflows/android-build.yml — flutter build apk --release --split-per-abi, публиковать все *.apk, убрать continue-on-error у kotlin unit tests; 2) pubspec.yaml — dev_dependency sqflite_common_ffi, test/sqlite_wins_repository_test.dart (inMemoryDatabasePath); 3) проверить analyze/test; 4) git add -A && commit; 5) git write-tree → python .tools/push_clean.py smolinb23-star/vpn-obhod-public <tree> (GH_TOKEN из .tools/.token); 6) gh run watch; при падении — gh run view --log-failed, чинить; 7) gh release download apk-<sha> -p \"*.apk\" -D ./dist; 8) отчёт и Этап 4 (flutter_netbird/Headscale, профиль, presence, Контакты)"
+}
