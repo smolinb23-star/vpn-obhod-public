@@ -1,14 +1,17 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'package:vpn_service/features/vpn/services/app_list_service.dart';
 import 'package:vpn_service/features/vpn/vpn_controller.dart';
 
 /// Экран «Исключённые приложения» (Split Tunneling).
 ///
-/// Позволяет выбрать приложения, которые НЕ будут использовать VPN-туннель
-/// (трафик пойдёт напрямую через мобильную сеть/Wi-Fi), а также приложения,
-/// которые БУДУТ идти через VPN (в режиме «только выбранные»).
+/// Список приложений загружается нативно через PackageManager (MethodChannel),
+/// иконки отображаются из base64. Ручной ввод пакетов убран.
 class SplitTunnelingScreen extends ConsumerStatefulWidget {
   const SplitTunnelingScreen({super.key});
 
@@ -28,13 +31,17 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
   final Set<String> _selectedPackages = <String>{};
   SplitTunnelMode _mode = SplitTunnelMode.allThroughVpn;
 
+  List<InstalledApp> _allApps = [];
+  List<InstalledApp> _filteredApps = [];
+  bool _loading = false;
   bool _saving = false;
-  String _manualPkgInput = '';
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _loadApps();
   }
 
   Future<void> _loadSettings() async {
@@ -65,6 +72,38 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
     );
   }
 
+  Future<void> _loadApps() async {
+    setState(() => _loading = true);
+    try {
+      final apps = await ref.read(appListServiceProvider).getInstalledApps();
+      apps.sort((a, b) => a.name.compareTo(b.name));
+      if (mounted) {
+        setState(() {
+          _allApps = apps;
+          _filteredApps = List.from(apps);
+          _loading = false;
+        });
+      }
+    } on Object catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _filterApps(String query) {
+    setState(() {
+      _searchQuery = query;
+      if (query.isEmpty) {
+        _filteredApps = List.from(_allApps);
+      } else {
+        final q = query.toLowerCase();
+        _filteredApps = _allApps
+            .where((a) => a.name.toLowerCase().contains(q) ||
+                a.packageName.toLowerCase().contains(q))
+            .toList();
+      }
+    });
+  }
+
   void _togglePackage(String packageName) {
     setState(() {
       if (_selectedPackages.contains(packageName)) {
@@ -75,14 +114,20 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
     });
   }
 
-  void _addManualPackage() {
-    final pkg = _manualPkgInput.trim();
-    if (pkg.isNotEmpty && !_selectedPackages.contains(pkg)) {
-      setState(() {
-        _selectedPackages.add(pkg);
-        _manualPkgInput = '';
-      });
+  bool _isSelected(String packageName) =>
+      _selectedPackages.contains(packageName);
+
+  Widget _buildAppIcon(InstalledApp app) {
+    if (app.iconBytes != null && app.iconBytes!.isNotEmpty) {
+      return Image.memory(
+        app.iconBytes!,
+        width: 32,
+        height: 32,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const Icon(Icons.apps),
+      );
     }
+    return const Icon(Icons.apps);
   }
 
   Future<void> _save() async {
@@ -133,8 +178,8 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Выберите, какие приложения будут использовать VPN.\n'
-                    'Введите имена пакетов вручную (например, com.whatsapp):',
+                    'Выберите приложения из списка ниже. '
+                    'Иконки и названия загружаются из системы.',
                     style: theme.textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),
@@ -156,55 +201,41 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
                   const SizedBox(height: 12),
                   TextField(
                     decoration: const InputDecoration(
-                      labelText: 'Имя пакета приложения',
-                      hintText: 'например, com.whatsapp',
+                      labelText: 'Поиск приложений',
+                      hintText: 'Название или пакет приложения',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.android),
+                      prefixIcon: Icon(Icons.search),
                     ),
-                    onChanged: (v) => _manualPkgInput = v,
-                    onSubmitted: (_) => _addManualPackage(),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'В пакетах: ${_selectedPackages.length}',
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.add),
-                        onPressed: _addManualPackage,
-                      ),
-                    ],
+                    onChanged: _filterApps,
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
-          if (_selectedPackages.isEmpty)
-            const Text(
-              'Ни один пакет не добавлен',
-              style: TextStyle(fontStyle: FontStyle.italic),
+          Text(
+            'Приложений: ${_allApps.length}, выбрано: ${_selectedPackages.length}',
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          if (_loading)
+            const Center(child: CircularProgressIndicator())
+          else if (_filteredApps.isEmpty)
+            const Center(
+              child: Text('Ничего не найдено'),
             )
-          else ...[
-            Text(
-              'Добавленные пакеты:',
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            ..._selectedPackages.map((pkg) {
+          else
+            ..._filteredApps.map((app) {
               return ListTile(
-                title: Text(pkg),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _togglePackage(pkg),
+                leading: _buildAppIcon(app),
+                title: Text(app.name),
+                subtitle: Text(app.packageName),
+                trailing: Checkbox(
+                  value: _isSelected(app.packageName),
+                  onChanged: (_) => _togglePackage(app.packageName),
                 ),
               );
             }),
-          ],
         ],
       ),
       bottomNavigationBar: _selectedPackages.isEmpty

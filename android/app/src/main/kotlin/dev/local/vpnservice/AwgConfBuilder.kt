@@ -17,6 +17,11 @@ object AwgConfBuilder {
         // Специальные пакеты-сигнатуры (AWG 2+): I1 — перед handshake.
         "i1" to "I1", "i2" to "I2", "i3" to "I3",
         "i4" to "I4", "i5" to "I5",
+        // Дополнительные обфускационные параметры.
+        "contentpaddingaddition" to "ContentPaddingAddition",
+        "rekeyaftertime" to "RekeyAfterTime",
+        "rejectaftertime" to "RejectAfterTime",
+        "maxhandshakeattempts" to "MaxHandshakeAttempts",
     )
 
     fun build(payload: Map<*, *>?): String? {

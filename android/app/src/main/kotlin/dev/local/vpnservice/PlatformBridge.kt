@@ -2,6 +2,12 @@ package dev.local.vpnservice
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Handler
@@ -9,9 +15,11 @@ import android.os.Looper
 import android.os.Process
 import android.provider.Settings
 import android.telephony.TelephonyManager
+import android.util.Base64
 import android.util.Log
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.io.ByteArrayOutputStream
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.Executors
@@ -43,6 +51,7 @@ class PlatformBridge(private val context: Context) {
                 result.success(null)
             }
             "dumpLogcat" -> dumpLogcat(call, result)
+            "getInstalledApps" -> result.success(getInstalledApps())
             else -> result.notImplemented()
         }
     }
@@ -185,5 +194,46 @@ class PlatformBridge(private val context: Context) {
 
     fun dispose() {
         executor.shutdownNow()
+    }
+
+    /** Возвращает JSON-массив установленных приложений: [{name, package, icon_base64}]. */
+    private fun getInstalledApps(): List<Map<String, Any?>> {
+        val pm = context.packageManager
+        val apps = mutableListOf<Map<String, Any?>>()
+        try {
+            val installed = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            for (info in installed) {
+                // Пропускаем системные приложения (опционально — оставляем все, пользователь выберет)
+                val name = info.loadLabel(pm)?.toString() ?: info.packageName
+                val pkg = info.packageName
+                val iconBase64 = loadIconBase64(pm, info)
+                apps.add(mapOf(
+                    "name" to name,
+                    "package" to pkg,
+                    "icon" to iconBase64,
+                ))
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "getInstalledApps failed: ${e.message}")
+        }
+        return apps
+    }
+
+    /** Иконка приложения в base64 PNG. */
+    private fun loadIconBase64(pm: PackageManager, info: ApplicationInfo): String? {
+        return try {
+            val drawable: Drawable = info.loadIcon(pm)
+            if (drawable is BitmapDrawable) {
+                val bitmap = drawable.bitmap
+                val baos = ByteArrayOutputStream()
+                bitmap.compress(Bitmap.CompressFormat.PNG, 90, baos)
+                Base64.encodeToString(baos.toByteArray(), Base64.DEFAULT)
+            } else {
+                null
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "loadIconBase64 failed for ${info.packageName}: ${e.message}")
+            null
+        }
     }
 }

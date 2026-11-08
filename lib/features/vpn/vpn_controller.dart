@@ -9,8 +9,10 @@ import 'package:flutter_vless/flutter_vless.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:vpn_service/core/models/vpn_config.dart';
+import 'package:vpn_service/core/services/clash_yaml_parser.dart';
 import 'package:vpn_service/core/services/profile_parser.dart';
 import 'package:vpn_service/core/services/wireguard_parser.dart';
+import 'package:vpn_service/core/services/xray_json_parser.dart';
 import 'package:vpn_service/features/vpn/services/vpn_service.dart';
 
 /// Провайдер сервиса туннеля.
@@ -212,12 +214,16 @@ class VpnController extends Notifier<VpnUiState> {
 
   /// Импортирует профиль (ссылка/JSON/подписка) и запоминает его.
   ///
-  /// Основной путь — чистый Dart-парсер [ProfileParser]; при неподдерживаемом
-  /// формате используется fallback `FlutterVless.parse()` (подписки, Clash
-  /// YAML, sing-box JSON, экзотические протоколы).
+  /// Порядок разбора:
+  ///  1. WireGuard/AmneziaWG .conf (WGConfigParser)
+  ///  2. Clash YAML (ClashYamlParser) — AmneziaWG и MASQUE
+  ///  3. Xray JSON (XrayJsonParser) — WireGuard + Noise
+  ///  4. vless://, hysteria2://, подписки (ProfileParser)
+  ///  5. Fallback: FlutterVless.parse() (подписки, Clash YAML, sing-box JSON, …)
   Future<VpnConfig?> importProfile(String input) async {
     VpnConfig? config;
-    // WireGuard/AmneziaWG .conf, вставленный как текст.
+
+    // 1) WireGuard/AmneziaWG .conf
     if (WGConfigParser.looksLikeWireGuardConf(input)) {
       try {
         config = const WGConfigParser().importConf(input);
@@ -226,6 +232,40 @@ class VpnController extends Notifier<VpnUiState> {
         return null;
       }
     }
+
+    // 2) Clash YAML — AmneziaWG / MASQUE
+    if (config == null && ClashYamlParser.looksLikeClashYaml(input)) {
+      try {
+        final clashConfigs = const ClashYamlParser().parse(input);
+        if (clashConfigs.isNotEmpty) {
+          config = clashConfigs.first;
+          // MASQUE требует Sing-box — предупреждаем пользователя.
+          if (ClashYamlParser.isMasque(config)) {
+            state = state.copyWith(
+              error:
+                  'MASQUE требует поддержку Sing-box. '
+                  'Установите sing-box или используйте другой протокол.',
+            );
+            return null;
+          }
+        }
+      } on ClashYamlParseException catch (e) {
+        state = state.copyWith(error: 'Clash YAML: ${e.message}');
+        return null;
+      }
+    }
+
+    // 3) Xray JSON с WireGuard outbound
+    if (config == null && XrayJsonParser.looksLikeWireGuardXrayJson(input)) {
+      try {
+        config = const XrayJsonParser().parse(input);
+      } on XrayJsonParseException catch (e) {
+        state = state.copyWith(error: 'Xray JSON: ${e.message}');
+        return null;
+      }
+    }
+
+    // 4) vless://, hysteria2://, подписки, CIDR
     if (config == null) {
       try {
         config = const ProfileParser().parseOne(input);
@@ -233,6 +273,7 @@ class VpnController extends Notifier<VpnUiState> {
         config = _parseWithPlugin(input);
       }
     }
+
     if (config == null) {
       state = state.copyWith(error: 'Импорт не удался: формат не распознан');
       return null;

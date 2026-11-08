@@ -35,6 +35,7 @@ class WGConfigParser {
     'jc', 'jmin', 'jmax', 'h1', 'h2', 'h3', 'h4', 's1', 's2',
     'i1', 'i2', 'i3', 'i4', 'i5', 'j1', 'j2', 'j3',
     'itimes', 'extendedtiming', 'table',
+    'contentpaddingaddition', 'rekeyaftertime', 'rejectaftertime', 'maxhandshakeattempts',
   };
 
   static const Set<String> _knownSections = <String>{'interface', 'peer'};
