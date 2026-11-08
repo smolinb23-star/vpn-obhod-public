@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -35,7 +32,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
   List<InstalledApp> _filteredApps = [];
   bool _loading = false;
   bool _saving = false;
-  String _searchQuery = '';
 
   @override
   void initState() {
@@ -91,7 +87,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
 
   void _filterApps(String query) {
     setState(() {
-      _searchQuery = query;
       if (query.isEmpty) {
         _filteredApps = List.from(_allApps);
       } else {

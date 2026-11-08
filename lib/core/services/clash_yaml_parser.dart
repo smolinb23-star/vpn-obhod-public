@@ -173,21 +173,36 @@ class ClashYamlParser {
 
       final mtu = (proxy['mtu'] as num?)?.toInt();
 
-      final wgConfig = WireGuardConfig(
-        name: name,
-        privateKey: privateKey,
-        addresses: _splitList(address),
-        peerPublicKey: publicKey,
-        endpointHost: server,
-        endpointPort: port,
-        allowedIps: _splitList(allowedIps),
-        dns: _splitList(dns),
-        mtu: mtu,
-        amnezia: amnezia,
-        warnings: List<String>.unmodifiable(warnings),
-      );
-
-      result.add(toVpnConfig(wgConfig));
+      result.add(VpnConfig(
+        remark: name,
+        protocol: ProfileProtocol.wireguard,
+        xrayJson: jsonEncode(<String, dynamic>{
+          'log': <String, dynamic>{'loglevel': 'warning'},
+          'outbounds': <dynamic>[
+            <String, dynamic>{
+              'tag': 'proxy',
+              'protocol': 'wireguard',
+              'settings': <String, dynamic>{
+                'secretKey': privateKey,
+                'address': _splitList(address),
+                'peers': <dynamic>[
+                  <String, dynamic>{
+                    'publicKey': publicKey,
+                    'endpoint': '$server:$port',
+                    'allowedIPs': _splitList(allowedIps),
+                    'keepAlive': 25,
+                  },
+                ],
+                if (mtu != null && mtu > 0) 'mtu': mtu,
+                if (dns.isNotEmpty) 'remoteDNS': _splitList(dns),
+              },
+            },
+          ],
+        }),
+        stream: 'wireguard',
+        security: 'none',
+        host: server,
+      ));
     }
 
     if (result.isEmpty) {

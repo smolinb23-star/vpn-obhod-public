@@ -112,17 +112,6 @@ class XrayJsonParser {
       );
     }
 
-    final allowedIps = (firstPeer?['allowedIPs'] as List<dynamic>?)
-        ?.map((e) => e.toString())
-        .toList(growable: false) ??
-        <String>['0.0.0.0/0', '::/0'];
-
-    final keepAlive = (firstPeer?['keepAlive'] as num?)?.toInt() ?? 25;
-    final mtu = (settings['mtu'] as num?)?.toInt();
-    final remoteDNS = (settings['remoteDNS'] as List<dynamic>?)
-        ?.map((e) => e.toString())
-        .toList(growable: false);
-
     emit('Разбор WireGuard JSON: secretKey=$secretKey, peerPublicKey=$peerPublicKey, '
         'endpoint=$endpointHost:$endpointPort, addresses=$addresses');
 
