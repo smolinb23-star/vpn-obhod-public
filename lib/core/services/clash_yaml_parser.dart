@@ -116,7 +116,6 @@ class ClashYamlParser {
           stream: '',
           security: '',
           host: proxy['server']?.toString() ?? '',
-          _masqueUnsupported: true,
         ));
         continue;
       }
