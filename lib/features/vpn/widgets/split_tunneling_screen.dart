@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:vpn_service/core/services/app_list_service.dart';
+import 'package:vpn_service/features/vpn/services/app_list_service.dart';
 import 'package:vpn_service/features/vpn/vpn_controller.dart';
 
 /// Экран «Исключённые приложения» (Split Tunneling).
@@ -272,5 +272,3 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
     }
   }
 }
-
-import 'package:shared_preferences/shared_preferences.dart';

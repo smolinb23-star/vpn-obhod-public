@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:vpn_service/core/models/vpn_config.dart';
+import 'package:vpn_service/core/models/mihomo_config.dart';
 import 'package:vpn_service/core/services/app_log.dart';
 import 'package:vpn_service/core/services/clash_yaml_parser.dart';
 import 'package:vpn_service/core/services/mihomo_service.dart';
@@ -159,7 +159,7 @@ class _ConfigManagementScreenState
         detectedType = parsed.type;
       }
 
-      await _profiles.saveProfile(ProfileEntity(
+      await ref.read(profileRepositoryProvider).saveProfile(ProfileEntity(
         id: name.hashCode.toString(),
         name: name,
         rawConfig: input,
@@ -190,7 +190,7 @@ class _ConfigManagementScreenState
   }
 
   Future<void> _deleteConfig(String id) async {
-    await _profiles.deleteProfile(id);
+    await ref.read(profileRepositoryProvider).deleteProfile(id);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Конфиг удалён')),
@@ -199,11 +199,11 @@ class _ConfigManagementScreenState
   }
 
   Future<void> _toggleEnabled(String id, bool value) async {
-    await _profiles.updateProfile(id, enabled: value);
+    await ref.read(profileRepositoryProvider).updateProfile(id, enabled: value);
   }
 
   Future<void> _setPriority(String id, int priority) async {
-    await _profiles.updateProfile(id, priority: priority);
+    await ref.read(profileRepositoryProvider).updateProfile(id, priority: priority);
   }
 
   @override

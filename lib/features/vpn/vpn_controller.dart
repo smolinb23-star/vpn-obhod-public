@@ -7,13 +7,13 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:vpn_service/core/models/mihomo_config.dart';
-import 'package:vpn_service/core/models/vpn_config.dart';
 import 'package:vpn_service/core/services/clash_yaml_parser.dart';
 import 'package:vpn_service/core/services/mihomo_service.dart';
 import 'package:vpn_service/core/services/profile_parser.dart';
 import 'package:vpn_service/core/services/profile_repository.dart';
 import 'package:vpn_service/core/services/wireguard_parser.dart';
 import 'package:vpn_service/core/services/xray_json_parser.dart';
+import 'package:vpn_service/features/vpn/services/vpn_service.dart';
 
 /// Состояние подключения Mihomo для UI.
 @immutable
@@ -62,39 +62,9 @@ class VpnUiState {
   }
 }
 
-/// Состояние туннеля.
-enum TunnelState { disconnected, connecting, connected, error }
-
-/// Метрики туннеля.
-class TunnelMetrics {
-  const TunnelMetrics({
-    this.uploadSpeed = 0,
-    this.downloadSpeed = 0,
-    this.upload = 0,
-    this.download = 0,
-    this.durationSeconds = 0,
-    this.rttMs,
-  });
-
-  final int uploadSpeed;
-  final int downloadSpeed;
-  final int upload;
-  final int download;
-  final int durationSeconds;
-  final int? rttMs;
-}
-
-/// Тип профиля для Mihomo.
-enum ProfileType { vless, awg, clash, xray, other }
-
 /// Провайдер MihomoService.
 final mihomoServiceProvider = Provider<MihomoService>((ref) {
   return MihomoService();
-});
-
-/// Провайдер ProfileRepository.
-final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
-  return ProfileRepository();
 });
 
 /// Режим раздельного туннелирования.
