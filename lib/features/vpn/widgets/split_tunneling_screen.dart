@@ -1,4 +1,3 @@
-import 'package:device_apps/device_apps.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -26,19 +25,17 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
   static const _modeKey = 'split_tunnel_mode';
   static const _selectedPkgsKey = 'split_tunnel_selected_packages';
 
-  List<Application> _allApps = [];
-  List<Application> _filteredApps = [];
   final Set<String> _selectedPackages = <String>{};
   SplitTunnelMode _mode = SplitTunnelMode.allThroughVpn;
 
-  bool _loading = true;
+  bool _loading = false;
   bool _saving = false;
+  String _manualPkgInput = '';
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
-    _loadApps();
   }
 
   Future<void> _loadSettings() async {
@@ -48,8 +45,9 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
 
     if (mounted) {
       setState(() {
+        final modeIndex = modeRaw != null ? int.tryParse(modeRaw) : null;
         _mode = SplitTunnelMode.values.firstWhere(
-          (m) => m.index == modeRaw,
+          (m) => m.index == modeIndex,
           orElse: () => SplitTunnelMode.allThroughVpn,
         );
         if (pkgsRaw != null && pkgsRaw.isNotEmpty) {
@@ -68,40 +66,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
     );
   }
 
-  Future<void> _loadApps() async {
-    try {
-      final apps = await DeviceApps.getInstalledApplications(
-        includeAppIcons: true,
-        includeSystemApps: false,
-      );
-      apps.sort((a, b) => a.appName.compareTo(b.appName));
-      if (mounted) {
-        setState(() {
-          _allApps = apps;
-          _filteredApps = List.from(apps);
-          _loading = false;
-        });
-      }
-    } on Object catch (_) {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-    }
-  }
-
-  void _filterApps(String query) {
-    setState(() {
-      if (query.isEmpty) {
-        _filteredApps = List.from(_allApps);
-      } else {
-        final q = query.toLowerCase();
-        _filteredApps = _allApps
-            .where((a) => a.appName.toLowerCase().contains(q))
-            .toList();
-      }
-    });
-  }
-
   void _togglePackage(String packageName) {
     setState(() {
       if (_selectedPackages.contains(packageName)) {
@@ -110,6 +74,16 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
         _selectedPackages.add(packageName);
       }
     });
+  }
+
+  void _addManualPackage() {
+    final pkg = _manualPkgInput.trim();
+    if (pkg.isNotEmpty && !_selectedPackages.contains(pkg)) {
+      setState(() {
+        _selectedPackages.add(pkg);
+        _manualPkgInput = '';
+      });
+    }
   }
 
   Future<void> _save() async {
@@ -126,12 +100,8 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
         );
         Navigator.of(context).pop(_selectedPackages);
       }
-    } on Object catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка сохранения: $e')),
-        );
-      }
+    } on Object catch (_) {
+      // ignore
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -164,10 +134,11 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Выберите, какие приложения будут использовать VPN.',
+                    'Выберите, какие приложения будут использовать VPN.\n'
+                    'Введите имена пакетов вручную (например, com.whatsapp):',
                     style: theme.textTheme.bodySmall,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   ...SplitTunnelMode.values.map((mode) {
                     return ListTile(
                       leading: Radio<SplitTunnelMode>(
@@ -186,62 +157,55 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
                   const SizedBox(height: 12),
                   TextField(
                     decoration: const InputDecoration(
-                      labelText: 'Поиск приложений',
-                      hintText: 'Введите название приложения',
+                      labelText: 'Имя пакета приложения',
+                      hintText: 'например, com.whatsapp',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.search),
+                      prefixIcon: Icon(Icons.android),
                     ),
-                    onChanged: _filterApps,
+                    onChanged: (v) => _manualPkgInput = v,
+                    onSubmitted: (_) => _addManualPackage(),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'В пакетах: ${_selectedPackages.length}',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add),
+                        onPressed: _addManualPackage,
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
-          Text(
-            'Приложения: ${_selectedPackages.length} выбрано',
-            style: theme.textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _selectedPackages.isEmpty
-                ? 'Ни одно приложение не выбрано'
-                : 'Эти приложения ${
-                    _mode == SplitTunnelMode.onlySelected
-                        ? 'будут использовать VPN'
-                        : 'не будут использовать VPN'
-                  }',
-            style: theme.textTheme.bodySmall,
-          ),
-          const SizedBox(height: 8),
-          if (_loading)
-            const Center(child: CircularProgressIndicator())
-          else if (_filteredApps.isEmpty)
-            const Center(
-              child: Text('Ничего не найдено'),
+          if (_selectedPackages.isEmpty)
+            const Text(
+              'Ни один пакет не добавлен',
+              style: TextStyle(fontStyle: FontStyle.italic),
             )
-          else
-            Expanded(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _filteredApps.length,
-                itemBuilder: (context, index) {
-                  final app = _filteredApps[index];
-                  final isSelected = _selectedPackages.contains(
-                    app.packageName,
-                  );
-                  return ListTile(
-                    leading: const Icon(Icons.apps),
-                    title: Text(app.appName),
-                    subtitle: Text(app.packageName),
-                    trailing: Checkbox(
-                      value: isSelected,
-                      onChanged: (_) => _togglePackage(app.packageName),
-                    ),
-                  );
-                },
-              ),
+          else ...[
+            Text(
+              'Добавленные пакеты:',
+              style: theme.textTheme.titleMedium,
             ),
+            const SizedBox(height: 8),
+            ..._selectedPackages.map((pkg) {
+              return ListTile(
+                title: Text(pkg),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () => _togglePackage(pkg),
+                ),
+              );
+            }),
+          ],
         ],
       ),
       bottomNavigationBar: _selectedPackages.isEmpty
