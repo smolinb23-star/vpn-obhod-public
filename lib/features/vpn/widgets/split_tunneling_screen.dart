@@ -28,7 +28,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
   final Set<String> _selectedPackages = <String>{};
   SplitTunnelMode _mode = SplitTunnelMode.allThroughVpn;
 
-  bool _loading = false;
   bool _saving = false;
   String _manualPkgInput = '';
 
