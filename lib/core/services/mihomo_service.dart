@@ -147,16 +147,6 @@ class MihomoService {
     }
   }
 
-  /// Останавливает туннель.
-  Future<void> stop() async {
-    try {
-      await _channel.invokeMethod('stop');
-    } on Object {
-      // ignore
-    }
-    _emit(const MihomoUiState(state: MihomoTunnelState.disconnected));
-  }
-
   /// Получает текущий статус от нативной стороны.
   Future<Map<String, dynamic>?> getStatus() async {
     try {
