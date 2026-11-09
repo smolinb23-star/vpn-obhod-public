@@ -1,8 +1,10 @@
 package dev.local.vpnservice
 
 import android.app.PendingIntent
+import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -99,7 +101,7 @@ class VpnForegroundService : Service() {
         }
     }
 
-    private fun buildNotification(): Notification {
+    private fun buildNotification(): android.app.Notification {
         // Открытие приложения по нажатию на уведомление
         val launch = packageManager.getLaunchIntentForPackage(packageName)
             ?: Intent(this, MainActivity::class.java)
@@ -133,10 +135,10 @@ class VpnForegroundService : Service() {
         )
 
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL_ID)
+            android.app.Notification.Builder(this, CHANNEL_ID)
         } else {
             @Suppress("DEPRECATION")
-            Notification.Builder(this)
+            android.app.Notification.Builder(this)
         }
         return builder
             .setContentTitle("VPN Подключен")
@@ -146,7 +148,7 @@ class VpnForegroundService : Service() {
             .addAction(R.drawable.ic_launcher, "Ускорить", pendingAccelerate)
             .addAction(android.R.drawable.ic_delete, "Остановить", pendingStop)
             .setOngoing(true)
-            .setCategory(Notification.CATEGORY_SERVICE)
+            .setCategory(android.app.Notification.CATEGORY_SERVICE)
             .setShowWhen(false)
             .build()
     }
