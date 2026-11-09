@@ -1,11 +1,11 @@
 {
-  "stage": 5.1,
-  "stage_status": "done_timeout_foreground_stop_apk_delivered",
+  "stage": 5.2,
+  "stage_status": "done_traffic_intercept_foreground_stop_apk_delivered",
   "apk": {
     "local": "dist/app-release.apk",
     "size_bytes": 170939166,
-    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-d730872d09a006fd294929020cf4b1ef2411b983",
-    "ci_run": 42581393464,
+    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-d461e242669ee66fe2b98346693c29a7657b5fc2",
+    "ci_run": 42590626917,
     "signing": "debug (release keystore — MANUAL)",
     "magic": "PK ZIP",
     "native_libs": "libam-go.so + libam-quick.so + libam.so (AWG) + libxray.so (VLESS) для arm64-v8a/armeabi-v7a/x86_64"
@@ -23,7 +23,8 @@
     "public_15": "SUCCESS 96e09e4 (3.4 Smart Auto-Connect final: I11 IP timeout 10с, post-connect delay 3с, 3 IP retry attempts, fallback endpoints, mobile VLESS priority, attempt history UI, cascade/CDN/CIDR bypass configs; analyze + 92 dart + 9 kotlin + apk) -> APK 101756662",
     "public_16": "SUCCESS 5f46fd4 (3.4.1 Split Tunneling: device_apps dependency, SplitTunnelingScreen UI, excludedApps in VpnService.start(), PROGRESS/STATE updated; analyze + 92 dart + 9 kotlin + apk) -> APK 101756662",
     "public_17": "SUCCESS 55f8ee1 (Этап 4.3: нативный App Picker через PlatformBridge.getInstalledApps() (PackageManager, JSON с base64-иконками), ClashYamlParser (proxies→WireGuardConfig, amnezia-wg-option), XrayJsonParser (wireguard JSON с шумом), WGConfigParser/AwgConfBuilder расширены (I2-I5, ContentPaddingAddition, RekeyAfterTime, RejectAfterTime, MaxHandshakeAttempts), MASQUE→требует Sing-box; analyze + 92 dart + 9 kotlin + apk) -> APK TBD",
-    "public_18": "SUCCESS d730872 (Этап 5.1: таймаут подключения 15 с в mihomo_service.dart + логирование этапов в vpn_controller.dart; VpnForegroundService.kt с уведомлением в шторке (заголовок 'VPN Подключен', текст 'Сервер: <имя>', кнопки 'Ускорить' (перезапуск url-test) и 'Остановить' (полный disconnect); кнопка 'Сбросить / Остановить' на главном экране; analyze + 92 dart + 9 kotlin + apk) -> APK TBD"
+    "public_18": "SUCCESS d730872 (Этап 5.1: таймаут подключения 15 с в mihomo_service.dart + логирование этапов в vpn_controller.dart; VpnForegroundService.kt с уведомлением в шторке (заголовок 'VPN Подключен', текст 'Сервер: <имя>', кнопки 'Ускорить' (перезапуск url-test) и 'Остановить' (полный disconnect); кнопка 'Сбросить / Остановить' на главном экране; analyze + 92 dart + 9 kotlin + apk) -> APK TBD",
+    "public_19": "SUCCESS d461e24 (Этап 5.1.2: TUN трафик - stack: system, auto_route, auto_detect_interface в интерфейсе; tcp fast_open + sniffer + enhanced_mode fake-ip в experimental; таймаут подключения 15 с с логированием этапов; VpnForegroundService.kt с уведомлением (Ускорить/Остановить); кнопка Сбросить/Остановить + выпадающий список конфигов со странами на главном экране; analyze + 92 dart + 9 kotlin + apk) -> APK 170939166"
   },
   "chosen_branches": {
     "vpn_core": "flutter_vless ^1.1.7",
