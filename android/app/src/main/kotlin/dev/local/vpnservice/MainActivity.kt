@@ -92,27 +92,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    override fun onNewIntent(intent: Intent?) {
-        super.onNewIntent(intent)
-        // Обработка действий из уведомления foreground service
-        when (intent?.action) {
-            "dev.local.vpnservice.ACCELERATE" -> {
-                val channel = MethodChannel(
-                    flutterEngine.dartExecutor.binaryMessenger,
-                    "dev.local.vpnservice/vpn_control",
-                )
-                channel.invokeMethod("accelerate", null)
-            }
-            "dev.local.vpnservice.STOP" -> {
-                val channel = MethodChannel(
-                    flutterEngine.dartExecutor.binaryMessenger,
-                    "dev.local.vpnservice/vpn_control",
-                )
-                channel.invokeMethod("disconnect", null)
-            }
-        }
-    }
-
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         awgBridge?.onActivityResult(requestCode, resultCode, data)
