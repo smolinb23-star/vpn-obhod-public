@@ -3,10 +3,11 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:vpn_service/core/models/mihomo_config.dart';
+import 'package:vpn_service/core/models/vpn_config.dart';
 import 'package:vpn_service/core/services/clash_yaml_parser.dart';
 import 'package:vpn_service/core/services/mihomo_service.dart';
 import 'package:vpn_service/core/services/profile_parser.dart';
@@ -14,6 +15,13 @@ import 'package:vpn_service/core/services/profile_repository.dart';
 import 'package:vpn_service/core/services/wireguard_parser.dart';
 import 'package:vpn_service/core/services/xray_json_parser.dart';
 import 'package:vpn_service/features/vpn/services/vpn_service.dart';
+
+/// Безопасное хранилище (flutter_secure_storage).
+final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
+  return const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+});
 
 /// Состояние подключения Mihomo для UI.
 @immutable
@@ -114,17 +122,14 @@ class VpnController extends Notifier<VpnUiState> {
     final modeRaw = prefs.getString(_splitTunnelModeKey);
     final pkgsRaw = prefs.getStringList(_selectedAppsKey) ?? <String>[];
 
-    if (mounted) {
-      setState(() {
-        if (modeRaw != null) {
-          _splitTunnelMode = SplitTunnelMode.values.firstWhere(
-            (m) => m.index == int.tryParse(modeRaw) ?? 0,
-            orElse: () => SplitTunnelMode.allThroughVpn,
-          );
-        }
-        _selectedPackages = pkgsRaw.toSet();
-      });
+    if (modeRaw != null) {
+      _splitTunnelMode = SplitTunnelMode.values.firstWhere(
+        (m) => m.index == int.tryParse(modeRaw) ?? 0,
+        orElse: () => SplitTunnelMode.allThroughVpn,
+      );
     }
+    _selectedPackages = pkgsRaw.toSet();
+    state = state.copyWith();
   }
 
   /// Сохраняет настройки раздельного туннелирования.
@@ -164,36 +169,27 @@ class VpnController extends Notifier<VpnUiState> {
       MihomoTunnelState.error => TunnelState.error,
     };
 
-    _currentState = _currentState.copyWith(
+    state = state.copyWith(
       state: mapped,
       currentServer: state.currentServer,
       error: state.error,
     );
-    state = _currentState;
 
     // Автоподключение при обрыве.
     if (state.state == MihomoTunnelState.disconnected &&
-        _currentState.state == TunnelState.disconnected &&
+        state.state == TunnelState.disconnected &&
         !_autoReconnecting) {
       _autoReconnecting = true;
       unawaited(Future<void>.delayed(const Duration(seconds: 2), () async {
         _autoReconnecting = false;
-        if (_currentState.state == TunnelState.disconnected) {
+        if (state.state == TunnelState.disconnected) {
           await autoConnect();
         }
       }));
     }
   }
 
-  VpnUiState _currentState = const VpnUiState();
-
   /// Импортирует профиль и сохраняет в ProfileRepository (sqflite).
-  ///
-  /// Порядок разбора:
-  ///  1. WireGuard/AmneziaWG .conf (WGConfigParser) → type 'awg'
-  ///  2. Clash/Mihomo YAML (ClashYamlParser) → type 'clash'
-  ///  3. Xray JSON (XrayJsonParser) → type 'xray'
-  ///  4. vless://, hysteria2://, подписки (ProfileParser) → type 'vless' / 'other'
   Future<VpnConfig?> importProfile(String input) async {
     VpnConfig? config;
     String? detectedType;
@@ -204,9 +200,10 @@ class VpnController extends Notifier<VpnUiState> {
         final wg = const WGConfigParser().parse(input);
         config = VpnConfig(
           remark: wg.name,
+          protocol: ProfileProtocol.wireguard,
+          xrayJson: '',
           profileType: ProfileType.awg,
           rawConfig: input,
-          xrayJson: '', // Mihomo генерирует конфиг из rawConfig
           type: 'awg',
         );
         detectedType = 'awg';
@@ -287,9 +284,10 @@ class VpnController extends Notifier<VpnUiState> {
       if (decoded != null && decoded.containsKey('outbounds')) {
         return VpnConfig(
           remark: 'Mihomo JSON',
+          protocol: ProfileProtocol.other,
+          xrayJson: input,
           profileType: ProfileType.other,
           rawConfig: input,
-          xrayJson: input,
           type: 'other',
         );
       }
@@ -306,20 +304,23 @@ class VpnController extends Notifier<VpnUiState> {
     final last = profiles.first;
     return VpnConfig(
       remark: last.name,
+      protocol: ProfileProtocol.values.firstWhere(
+        (p) => p.name == last.type,
+        orElse: () => ProfileProtocol.other,
+      ),
+      xrayJson: last.rawConfig,
       profileType: ProfileType.values.firstWhere(
         (p) => p.name == last.type,
         orElse: () => ProfileType.other,
       ),
       rawConfig: last.rawConfig,
-      xrayJson: last.rawConfig,
       type: last.type,
     );
   }
 
   /// Запускает туннель Mihomo по профилю.
   Future<void> connect(VpnConfig config) async {
-    _currentState = state.copyWith(state: TunnelState.connecting, clearError: true);
-    state = _currentState;
+    state = state.copyWith(state: TunnelState.connecting, clearError: true);
 
     try {
       final mihomoJson = MihomoService.generateMihomoConfig(
@@ -330,18 +331,16 @@ class VpnController extends Notifier<VpnUiState> {
 
       await _mihomo.start(mihomoJson);
 
-      _currentState = _currentState.copyWith(
+      state = state.copyWith(
         state: TunnelState.connecting,
         remark: config.remark,
         config: config,
       );
-      state = _currentState;
     } on Object catch (e) {
-      _currentState = _currentState.copyWith(
+      state = state.copyWith(
         state: TunnelState.error,
         error: '$e',
       );
-      state = _currentState;
     }
   }
 
@@ -350,17 +349,15 @@ class VpnController extends Notifier<VpnUiState> {
     final prefs = await SharedPreferences.getInstance();
     final input = subscription ?? prefs.getString(_subscriptionKey) ?? '';
 
-    _currentState = state.copyWith(
+    state = state.copyWith(
       state: TunnelState.connecting,
       remark: 'Поиск лучшего сервера…',
       clearError: true,
     );
-    state = _currentState;
 
     List<VpnConfig> configs = <VpnConfig>[];
 
     if (input.startsWith('http://') || input.startsWith('https://')) {
-      // Подписка по URL
       try {
         final resp = await http.Client()
             .get(Uri.parse(input))
@@ -385,12 +382,16 @@ class VpnController extends Notifier<VpnUiState> {
         configs = allProfiles.map((p) {
           return VpnConfig(
             remark: p.name,
+            protocol: ProfileProtocol.values.firstWhere(
+              (t) => t.name == p.type,
+              orElse: () => ProfileProtocol.other,
+            ),
+            xrayJson: p.rawConfig,
             profileType: ProfileType.values.firstWhere(
               (t) => t.name == p.type,
               orElse: () => ProfileType.other,
             ),
             rawConfig: p.rawConfig,
-            xrayJson: p.rawConfig,
             type: p.type,
           );
         }).toList(growable: false);
@@ -398,16 +399,14 @@ class VpnController extends Notifier<VpnUiState> {
     }
 
     if (configs.isEmpty) {
-      _currentState = state.copyWith(
+      state = state.copyWith(
         state: TunnelState.error,
         error: 'Нет конфигураций. Загрузите Clash YAML или .conf.',
       );
-      state = _currentState;
       return;
     }
 
-    // Mihomo url-test сам выберет лучший сервер. Сохраняем все профили
-    // и подключаемся к первому (Mihomo внутренне переключит на лучший).
+    // Mihomo url-test сам выберет лучший сервер.
     for (final c in configs) {
       final entity = ProfileEntity(
         id: c.remark.hashCode.toString(),
@@ -432,8 +431,7 @@ class VpnController extends Notifier<VpnUiState> {
     try {
       await _mihomo.stop();
     } finally {
-      _currentState = state.copyWith(state: TunnelState.disconnected);
-      state = _currentState;
+      state = state.copyWith(state: TunnelState.disconnected);
     }
   }
 }

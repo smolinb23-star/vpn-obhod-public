@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+/// Тип профиля для Mihomo.
+enum ProfileType { vless, awg, clash, xray, other }
+
 /// Тип источника, из которого импортирован профиль.
 enum ConfigKind { shareLink, xrayJson, subscription, unknown }
 
@@ -35,6 +38,9 @@ class VpnConfig {
     this.cascadeOutbound2,
     this.cidrList = const [],
     this.grpcServiceName = '',
+    this.profileType = ProfileType.other,
+    this.rawConfig = '',
+    this.type = 'other',
   });
 
   factory VpnConfig.fromJson(Map<String, dynamic> json) => VpnConfig(
@@ -64,6 +70,12 @@ class VpnConfig {
             ?.map((e) => e.toString())
             .toList(growable: false) ?? const [],
         grpcServiceName: json['grpcServiceName'] as String? ?? '',
+        profileType: ProfileType.values.firstWhere(
+          (p) => p.name == json['profileType'],
+          orElse: () => ProfileType.other,
+        ),
+        rawConfig: json['rawConfig'] as String? ?? '',
+        type: json['type'] as String? ?? 'other',
       );
 
   final String remark;
@@ -105,6 +117,15 @@ class VpnConfig {
   /// Список CIDR диапазонов для маршрутизации через VPN.
   final List<String> cidrList;
 
+  /// Тип профиля для Mihomo.
+  final ProfileType profileType;
+
+  /// Исходная строка конфига (YAML / JSON / .conf / ссылка).
+  final String rawConfig;
+
+  /// Строковое представление типа (awg, clash, xray, vless, other).
+  final String type;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
         'remark': remark,
         'protocol': protocol.name,
@@ -120,6 +141,9 @@ class VpnConfig {
         'cascadeOutbound1': cascadeOutbound1?.toJson(),
         'cascadeOutbound2': cascadeOutbound2?.toJson(),
         'cidrList': cidrList,
+        'profileType': profileType.name,
+        'rawConfig': rawConfig,
+        'type': type,
       };
 
   String toJsonString() => jsonEncode(toJson());
@@ -138,4 +162,16 @@ class VpnConfig {
 
   /// Возвращает true если это gRPC транспорт.
   bool get isGrpc => stream == 'grpc';
+
+  /// Протокол vless.
+  bool get isVless => profileType == ProfileType.vless || type == 'vless';
+
+  /// AmneziaWG / WireGuard.
+  bool get isAwg => profileType == ProfileType.awg || type == 'awg';
+
+  /// Clash / Mihomo YAML.
+  bool get isClash => profileType == ProfileType.clash || type == 'clash';
+
+  /// Xray JSON.
+  bool get isXray => profileType == ProfileType.xray || type == 'xray';
 }

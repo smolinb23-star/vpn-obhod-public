@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:vpn_service/core/models/mihomo_config.dart';
 import 'package:vpn_service/core/models/vpn_config.dart';
 import 'package:vpn_service/core/services/mihomo_service.dart';
 import 'package:vpn_service/core/services/profile_repository.dart';
+import 'package:vpn_service/features/vpn/services/vpn_service.dart';
 import 'package:vpn_service/features/vpn/vpn_controller.dart';
 import 'package:vpn_service/features/vpn/widgets/config_management_screen.dart';
 import 'package:vpn_service/features/vpn/widgets/split_tunneling_screen.dart';
@@ -225,6 +225,8 @@ class _ServerList extends ConsumerWidget {
                   final controller = ref.read(vpnControllerProvider.notifier);
                   await controller.connect(VpnConfig(
                     remark: profile.name,
+                    protocol: ProfileProtocol.other,
+                    xrayJson: profile.rawConfig,
                     profileType: ProfileType.values.firstWhere(
                       (p) => p.name == profile.type,
                       orElse: () => ProfileType.other,

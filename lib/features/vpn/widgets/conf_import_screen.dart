@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:vpn_service/core/models/vpn_config.dart';
 import 'package:vpn_service/core/models/wireguard_config.dart';
 import 'package:vpn_service/core/services/app_log.dart';
+import 'package:vpn_service/core/services/profile_repository.dart';
 import 'package:vpn_service/core/services/wireguard_parser.dart';
 import 'package:vpn_service/features/vpn/services/awg_session_controller.dart';
 import 'package:vpn_service/features/vpn/services/log_export_service.dart';
@@ -205,8 +206,15 @@ class _ConfImportScreenState extends ConsumerState<ConfImportScreen> {
   Future<void> _connectViaXray(VpnConfig config) async {
     setState(() => _busy = true);
     try {
+      await ref.read(profileRepositoryProvider).saveProfile(ProfileEntity(
+        id: config.remark.hashCode.toString(),
+        name: config.remark,
+        rawConfig: config.rawConfig,
+        type: config.type,
+        priority: 0,
+        enabled: true,
+      ));
       final controller = ref.read(vpnControllerProvider.notifier);
-      await controller.saveProfile(config);
       await controller.connect(config);
       if (!mounted) return;
       final ui = ref.read(vpnControllerProvider);

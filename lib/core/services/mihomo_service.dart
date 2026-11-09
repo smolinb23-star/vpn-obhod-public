@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:meta/meta.dart';
 
 /// Статус подключения Mihomo.
 enum MihomoTunnelState { disconnected, connecting, connected, error }
@@ -95,10 +96,6 @@ class MihomoService {
     ));
     try {
       await _channel.invokeMethod('start', {'config': mihomoJson});
-      _stateSubscription?.cancel();
-      _stateSubscription = _channel
-          .receiveBroadcastStream('status')
-          .listen(_onStatus, onError: (_) {});
     } on Exception catch (e) {
       _emit(MihomoUiState(
         state: MihomoTunnelState.error,
@@ -115,12 +112,18 @@ class MihomoService {
     } on Object {
       // ignore
     }
-    _stateSubscription?.cancel();
-    _stateSubscription = null;
     _emit(const MihomoUiState(state: MihomoTunnelState.disconnected));
   }
 
-  StreamSubscription? _stateSubscription;
+  /// Получает текущий статус от нативной стороны.
+  Future<Map<String, dynamic>?> getStatus() async {
+    try {
+      final result = await _channel.invokeMethod<Map<String, dynamic>>('getStatus');
+      return result;
+    } on Object {
+      return null;
+    }
+  }
 
   void _onStatus(dynamic data) {
     try {
@@ -409,10 +412,10 @@ class _MihomoConfigGenerator {
       'tag': 'proxy',
       'server': server,
       'server_port': port,
-      'local_address': <dynamic>[],
+      'local_address': [],
       'private_key': privateKey,
       'peer_public_key': peerPublicKey,
-      'reserved': <dynamic>[],
+      'reserved': [],
       'mtu': int.tryParse(mtu) ?? 1280,
     };
 
@@ -600,7 +603,7 @@ class _MihomoConfigGenerator {
           'tag': 'proxy',
           'server': settings['address'] ?? '',
           'server_port': settings['port'] ?? 51820,
-          'local_address': <dynamic>[],
+          'local_address': [],
           'private_key': settings['secretKey'] ?? '',
           'peer_public_key': settings['peerPublicKey'] ?? '',
           'mtu': settings['mtu'] ?? 1280,
