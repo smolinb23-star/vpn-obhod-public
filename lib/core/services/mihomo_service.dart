@@ -88,7 +88,7 @@ class MihomoService {
 
   /// Запускает туннель Mihomo с указанным JSON-конфигом.
   Future<void> start(String mihomoJson) async {
-    _emit(MihomoUiState(
+    _emit(const MihomoUiState(
       state: MihomoTunnelState.connecting,
       error: null,
     ));
@@ -283,7 +283,6 @@ class _MihomoConfigGenerator {
       }
 
       final firstOutbound = outbounds.first as Map<String, dynamic>;
-      final protocol = firstOutbound['protocol'] as String?;
 
       // Преобразуем Xray outbound в sing-box формат
       final sbOutbound = _convertXrayOutboundToSingBox(firstOutbound);

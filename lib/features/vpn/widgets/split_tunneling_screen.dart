@@ -79,7 +79,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen> {
 
   void _filterApps(String query) {
     setState(() {
-      _searchQuery = query;
       if (query.isEmpty) {
         _filteredApps = List.from(_allApps);
       } else {
