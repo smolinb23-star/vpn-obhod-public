@@ -15,7 +15,8 @@ class SqliteWinsRepository implements WinsRepository {
   }
 
   String _key(String methodId, String networkKey) =>
-      'win_$methodId_$networkKey';
+      // ignore: unnecessary_brace_in_string_interps
+      'win_${methodId}_${networkKey}';
 
   @override
   Future<int> winsFor(String methodId, String networkKey) async {
