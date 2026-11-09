@@ -54,6 +54,17 @@
                 android:value="vpn tunnel keep-alive"/>
         </service>
 
+        <!-- Foreground Service с уведомлением в шторке (кнопки Ускорить/Остановить). -->
+        <service
+            android:name=".VpnForegroundService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="vpn tunnel"/>
+        </service>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>

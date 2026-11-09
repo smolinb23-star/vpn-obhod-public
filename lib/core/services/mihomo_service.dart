@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:vpn_service/core/services/app_log.dart';
+
 /// Статус подключения Mihomo.
 enum MihomoTunnelState { disconnected, connecting, connected, error }
 
@@ -87,11 +89,18 @@ class MihomoService {
   MihomoUiState get current => _current;
 
   /// Запускает туннель Mihomo с указанным JSON-конфигом.
+  ///
+  /// Если нативное ядро не прислало событие Connected/Error за
+  /// [_connectTimeout], переводит состояние в ошибку таймаута.
+  static const Duration connectTimeout = Duration(seconds: 15);
+
   Future<void> start(String mihomoJson) async {
     _emit(const MihomoUiState(
       state: MihomoTunnelState.connecting,
       error: null,
     ));
+    _connectTimeoutTimer?.cancel();
+
     try {
       await _channel.invokeMethod('start', {'config': mihomoJson});
     } on Exception catch (e) {
@@ -99,6 +108,41 @@ class MihomoService {
         state: MihomoTunnelState.error,
         error: e.toString(),
       ));
+      rethrow;
+    }
+
+    // Ждём события Connected/Error от нативной стороны.
+    _connectTimeoutTimer = Timer(connectTimeout, () {
+      if (_current.state == MihomoTunnelState.connecting) {
+        _emit(MihomoUiState(
+          state: MihomoTunnelState.error,
+          error: 'Таймаут подключения: Mihomo не ушёл в Connected за '
+              '${connectTimeout.inSeconds} с.',
+        ));
+      }
+    });
+  }
+
+  Timer? _connectTimeoutTimer;
+
+  /// Останавливает туннель.
+  Future<void> stop() async {
+    _connectTimeoutTimer?.cancel();
+    _connectTimeoutTimer = null;
+    try {
+      await _channel.invokeMethod('stop');
+    } on Object {
+      // ignore
+    }
+    _emit(const MihomoUiState(state: MihomoTunnelState.disconnected));
+  }
+
+  /// Запускает повторный url-test (поиск лучшего сервера).
+  Future<void> accelerate() async {
+    try {
+      await _channel.invokeMethod('accelerate');
+    } on Exception catch (e) {
+      appLog.warn('MihomoService', 'accelerate error: $e');
       rethrow;
     }
   }

@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:vpn_service/core/models/vpn_config.dart';
+import 'package:vpn_service/core/services/app_log.dart';
 import 'package:vpn_service/core/services/clash_yaml_parser.dart';
 import 'package:vpn_service/core/services/mihomo_service.dart';
 import 'package:vpn_service/core/services/profile_parser.dart';
@@ -99,6 +101,7 @@ class VpnController extends Notifier<VpnUiState> {
   ProfileRepository get _profiles => ref.read(profileRepositoryProvider);
 
   StreamSubscription? _statusSub;
+  MethodChannel? _controlChannel;
   bool _autoReconnecting = false;
 
   SplitTunnelMode _splitTunnelMode = SplitTunnelMode.allThroughVpn;
@@ -108,8 +111,25 @@ class VpnController extends Notifier<VpnUiState> {
   VpnUiState build() {
     _statusSub?.cancel();
     _statusSub = _mihomo.stateStream.listen(_onMihomoStatus);
+
+    // Канал для команд из уведомления foreground service (Ускорить / Остановить)
+    _controlChannel = const MethodChannel('dev.local.vpnservice/vpn_control');
+    _controlChannel!.setMethodCallHandler((call) async {
+      switch (call.method) {
+        case 'disconnect':
+          await disconnect();
+          return null;
+        case 'accelerate':
+          await accelerate();
+          return null;
+        default:
+          throw MissingPluginException(call.method);
+      }
+    });
+
     ref.onDispose(() {
       _statusSub?.cancel();
+      _controlChannel?.setMethodCallHandler(null);
       _mihomo.dispose();
     });
     _loadSplitTunnelSettings();
@@ -320,12 +340,18 @@ class VpnController extends Notifier<VpnUiState> {
   Future<void> connect(VpnConfig config) async {
     state = state.copyWith(state: TunnelState.connecting, clearError: true);
 
+    appLog.info('VPN', 'Prepare: config=${config.remark}, type=${config.type}');
+
     try {
+      appLog.info('VPN', 'Core Start: генерируем Mihomo JSON конфиг');
+
       final mihomoJson = MihomoService.generateMihomoConfig(
         rawConfig: config.rawConfig,
         configType: config.type,
         excludedApps: excludedAppsForMihomo,
       );
+
+      appLog.info('VPN', 'Waiting for Tunnel: запуск Mihomo через MethodChannel');
 
       await _mihomo.start(mihomoJson);
 
@@ -334,7 +360,15 @@ class VpnController extends Notifier<VpnUiState> {
         remark: config.remark,
         config: config,
       );
+
+      appLog.info('VPN', 'Connected: туннель установлен через ${config.remark}');
+
+      // Показываем foreground service уведомление
+      _controlChannel?.invokeMethod('show_notification', {
+        'server': config.remark,
+      });
     } on Object catch (e) {
+      appLog.warn('VPN', 'Error: $e');
       state = state.copyWith(
         state: TunnelState.error,
         error: '$e',
@@ -430,7 +464,38 @@ class VpnController extends Notifier<VpnUiState> {
       await _mihomo.stop();
     } finally {
       state = state.copyWith(state: TunnelState.disconnected);
+      // Скрываем foreground service уведомление
+      _controlChannel?.invokeMethod('hide_notification', null);
     }
+  }
+
+  /// Ускорение: перезапускает url-test для поиска лучшего сервера.
+  Future<void> accelerate() async {
+    try {
+      await _mihomo.accelerate();
+      state = state.copyWith(
+        state: TunnelState.connecting,
+        remark: 'Поиск лучшего сервера…',
+        clearError: true,
+      );
+    } on Object catch (e) {
+      state = state.copyWith(
+        state: TunnelState.error,
+        error: 'Ошибка ускорения: $e',
+      );
+    }
+  }
+
+  /// Жёсткий сброс: отключает VPN, очищает состояние, убивает нативный процесс.
+  Future<void> hardReset() async {
+    await disconnect();
+    state = state.copyWith(
+      state: TunnelState.disconnected,
+      remark: '',
+      config: null,
+      currentServer: '',
+      clearError: true,
+    );
   }
 }
 

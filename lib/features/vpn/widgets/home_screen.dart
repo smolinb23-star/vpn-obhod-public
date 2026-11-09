@@ -58,6 +58,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (mounted) setState(() => _busy = false);
   }
 
+  /// Жёсткий сброс: отключает VPN и убивает нативный процесс.
+  Future<void> _hardReset() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+
+    final controller = ref.read(vpnControllerProvider.notifier);
+    await controller.hardReset();
+
+    if (mounted) {
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('VPN полностью остановлен'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = ref.watch(vpnControllerProvider);
@@ -158,6 +177,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   onPressed: _busy ? null : _disconnect,
                   icon: const Icon(Icons.link_off),
                   label: const Text('Отключиться'),
+                ),
+                const SizedBox(height: 8),
+                // Кнопка полного сброса
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _hardReset,
+                  icon: const Icon(Icons.power_settings_new, color: Colors.red),
+                  label: const Text(
+                    'Сбросить / Остановить',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                  ),
                 ),
                 const SizedBox(height: 16),
               ],
