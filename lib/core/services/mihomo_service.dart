@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:meta/meta.dart';
 
 /// Статус подключения Mihomo.
 enum MihomoTunnelState { disconnected, connecting, connected, error }
@@ -22,7 +21,6 @@ class ServerLatency {
 }
 
 /// Состояние туннеля Mihomo для UI.
-@immutable
 class MihomoUiState {
   const MihomoUiState({
     this.state = MihomoTunnelState.disconnected,
@@ -122,35 +120,6 @@ class MihomoService {
       return result;
     } on Object {
       return null;
-    }
-  }
-
-  void _onStatus(dynamic data) {
-    try {
-      final map = data as Map;
-      final connState = map['connectionState'] as String?;
-      final server = map['currentServer'] as String? ?? '';
-      final dl = (map['downloadSpeed'] as num?)?.toInt() ?? 0;
-      final ul = (map['uploadSpeed'] as num?)?.toInt() ?? 0;
-      final latency = (map['latencyMs'] as num?)?.toInt();
-
-      final mapped = switch (connState) {
-        'connected' => MihomoTunnelState.connected,
-        'connecting' => MihomoTunnelState.connecting,
-        'disconnected' => MihomoTunnelState.disconnected,
-        'error' => MihomoTunnelState.error,
-        _ => MihomoTunnelState.disconnected,
-      };
-
-      _emit(MihomoUiState(
-        state: mapped,
-        currentServer: server,
-        downloadSpeed: dl,
-        uploadSpeed: ul,
-        latencyMs: latency,
-      ));
-    } on Object {
-      // ignore malformed status
     }
   }
 

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:vpn_service/core/services/app_log.dart';
 import 'package:vpn_service/core/services/clash_yaml_parser.dart';
 import 'package:vpn_service/core/services/mihomo_service.dart';
 import 'package:vpn_service/core/services/profile_parser.dart';
