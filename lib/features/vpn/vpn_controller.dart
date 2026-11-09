@@ -124,7 +124,7 @@ class VpnController extends Notifier<VpnUiState> {
 
     if (modeRaw != null) {
       _splitTunnelMode = SplitTunnelMode.values.firstWhere(
-        (m) => m.index == int.tryParse(modeRaw) ?? 0,
+        (m) => m.index == (int.tryParse(modeRaw) ?? 0),
         orElse: () => SplitTunnelMode.allThroughVpn,
       );
     }
@@ -161,8 +161,8 @@ class VpnController extends Notifier<VpnUiState> {
     }
   }
 
-  void _onMihomoStatus(MihomoUiState state) {
-    final mapped = switch (state.state) {
+  void _onMihomoStatus(MihomoUiState mihomoState) {
+    final mapped = switch (mihomoState.state) {
       MihomoTunnelState.connected => TunnelState.connected,
       MihomoTunnelState.connecting => TunnelState.connecting,
       MihomoTunnelState.disconnected => TunnelState.disconnected,
@@ -171,14 +171,12 @@ class VpnController extends Notifier<VpnUiState> {
 
     state = state.copyWith(
       state: mapped,
-      currentServer: state.currentServer,
-      error: state.error,
+      currentServer: mihomoState.currentServer,
+      error: mihomoState.error,
     );
 
     // Автоподключение при обрыве.
-    if (state.state == MihomoTunnelState.disconnected &&
-        state.state == TunnelState.disconnected &&
-        !_autoReconnecting) {
+    if (mapped == TunnelState.disconnected && !_autoReconnecting) {
       _autoReconnecting = true;
       unawaited(Future<void>.delayed(const Duration(seconds: 2), () async {
         _autoReconnecting = false;

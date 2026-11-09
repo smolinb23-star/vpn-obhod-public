@@ -176,7 +176,6 @@ class MihomoService {
   }
 
   void dispose() {
-    _stateSubscription?.cancel();
     _stateCtrl.close();
   }
 }
@@ -245,8 +244,8 @@ class _MihomoConfigGenerator {
       },
       'dns': <String, dynamic>{
         'servers': <String, dynamic>{
-          'local': <String, dynamic>[
-            <String, dynamic>{
+          'local': [
+            {
               'address': '1.1.1.1',
               'address_resolver': '1.1.1.1',
               'strategy': 'ipv4_only',
@@ -334,7 +333,7 @@ class _MihomoConfigGenerator {
         'log': <String, dynamic>{'level': 'info'},
         'dns': <String, dynamic>{
           'servers': <String, dynamic>{
-            'local': <String, dynamic>[
+            'local': [
               {'address': '1.1.1.1', 'strategy': 'ipv4_only'},
             ],
           },
@@ -437,7 +436,7 @@ class _MihomoConfigGenerator {
       'log': <String, dynamic>{'level': 'info'},
       'dns': <String, dynamic>{
         'servers': <String, dynamic>{
-          'local': <String, dynamic>[{'address': dns, 'strategy': 'ipv4_only'}],
+          'local': [{'address': dns, 'strategy': 'ipv4_only'}],
         },
         'final': 'local',
       },
@@ -484,7 +483,7 @@ class _MihomoConfigGenerator {
       'log': <String, dynamic>{'level': 'info'},
       'dns': <String, dynamic>{
         'servers': <String, dynamic>{
-          'local': <String, dynamic>[{'address': '1.1.1.1', 'strategy': 'ipv4_only'}],
+          'local': [{'address': '1.1.1.1', 'strategy': 'ipv4_only'}],
         },
         'final': 'local',
       },

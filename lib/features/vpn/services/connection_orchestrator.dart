@@ -386,21 +386,11 @@ class ConnectionOrchestrator {
           await _vpn.connect(candidate.vlessConfig!);
           break;
         case ConnectionMethodType.cascade:
-          if (candidate.cascadeConfig == null) {
-            timeoutTimer.cancel();
-            _recordAttempt(candidate.name, false, 'Нет конфига каскада');
-            return false;
-          }
-          await _vpn.connectCascade(candidate.cascadeConfig!);
-          break;
         case ConnectionMethodType.cidr:
-          if (candidate.cidrConfig == null) {
-            timeoutTimer.cancel();
-            _recordAttempt(candidate.name, false, 'Нет конфига CIDR');
-            return false;
-          }
-          await _vpn.connectCidr(candidate.cidrConfig!);
-          break;
+          // Mihomo handles all protocols through url-test, no separate cascade/cidr methods
+          timeoutTimer.cancel();
+          _recordAttempt(candidate.name, false, 'Метод не поддерживается в Mihomo');
+          return false;
       }
 
       // Ждём чтобы Android обновил таблицу маршрутизации и туннель стабилизировался.
