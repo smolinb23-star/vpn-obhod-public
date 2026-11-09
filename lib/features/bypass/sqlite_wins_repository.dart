@@ -1,76 +1,64 @@
-import 'dart:io';
+import 'dart:convert';
 
-import 'package:sqflite/sqflite.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'wins_repository.dart';
 
-/// SQLite-память побед: bypass_wins(method_id, network_key, wins, last_success_ts).
+/// Память побед в shared_preferences: bypass_wins(method_id, network_key, wins, last_success_ts).
 class SqliteWinsRepository implements WinsRepository {
-  SqliteWinsRepository._(this._db);
+  SqliteWinsRepository._();
 
-  /// Открывает БД в стандартном каталоге приложения (Android: getDatabasesPath).
   static Future<SqliteWinsRepository> openDefault() async {
-    final dir = await getDatabasesPath();
-    return open('$dir${Platform.pathSeparator}bypass_wins.db');
+    return SqliteWinsRepository._();
   }
 
   static Future<SqliteWinsRepository> open(String path) async {
-    final db = await openDatabase(
-      path,
-      version: 1,
-      onCreate: (db, version) => db.execute('''
-        CREATE TABLE bypass_wins (
-          method_id TEXT NOT NULL,
-          network_key TEXT NOT NULL,
-          wins INTEGER NOT NULL DEFAULT 0,
-          last_success_ts INTEGER NOT NULL,
-          PRIMARY KEY (method_id, network_key)
-        )
-      '''),
-    );
-    return SqliteWinsRepository._(db);
+    return SqliteWinsRepository._();
   }
 
-  final Database _db;
+  String _key(String methodId, String networkKey) =>
+      'win_${methodId}_${networkKey}';
 
   @override
   Future<int> winsFor(String methodId, String networkKey) async {
-    final rows = await _db.query(
-      'bypass_wins',
-      columns: <String>['wins'],
-      where: 'method_id = ? AND network_key = ?',
-      whereArgs: <Object?>[methodId, networkKey],
-      limit: 1,
-    );
-    if (rows.isEmpty) return 0;
-    return rows.first['wins'] as int? ?? 0;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_key(methodId, networkKey)) ?? 0;
   }
 
   @override
   Future<void> recordWin(String methodId, String networkKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = _key(methodId, networkKey);
+    final current = prefs.getInt(key) ?? 0;
     final ts = DateTime.now().millisecondsSinceEpoch;
-    await _db.rawQuery('''
-      INSERT INTO bypass_wins (method_id, network_key, wins, last_success_ts)
-      VALUES (?, ?, 1, ?)
-      ON CONFLICT(method_id, network_key)
-      DO UPDATE SET wins = wins + 1, last_success_ts = excluded.last_success_ts
-    ''', <Object?>[methodId, networkKey, ts]);
+    await prefs.setInt(key, current + 1);
+    await prefs.setInt('${key}_ts', ts);
   }
 
   @override
   Future<String?> bestMethodFor(String networkKey) async {
-    final rows = await _db.query(
-      'bypass_wins',
-      columns: <String>['method_id'],
-      where: 'network_key = ?',
-      whereArgs: <Object?>[networkKey],
-      orderBy: 'wins DESC, last_success_ts DESC',
-      limit: 1,
-    );
-    if (rows.isEmpty) return null;
-    return rows.first['method_id'] as String;
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys().where((k) => k.startsWith('win_'));
+    String? bestMethod;
+    int bestWins = 0;
+    int bestTs = 0;
+    for (final key in keys) {
+      final parts = key.split('_');
+      if (parts.length < 3) continue;
+      final methodId = parts[1];
+      final networkKeyPart = parts.sublist(2).join('_');
+      if (networkKeyPart != networkKey) continue;
+      final wins = prefs.getInt(key) ?? 0;
+      final ts = prefs.getInt('${key}_ts') ?? 0;
+      if (wins > bestWins || (wins == bestWins && ts > bestTs)) {
+        bestWins = wins;
+        bestTs = ts;
+        bestMethod = methodId;
+      }
+    }
+    return bestMethod;
   }
 
   @override
-  Future<void> close() => _db.close();
+  Future<void> close() async {}
 }
