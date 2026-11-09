@@ -92,9 +92,12 @@ class PlatformBridge {
   }
 
   /// Постоянное уведомление + START_STICKY: процесс не убивается в фоне.
-  Future<void> startKeepAlive() async {
+  Future<void> startKeepAlive({String? server}) async {
     try {
-      await _channel.invokeMethod<void>('startKeepAlive');
+      await _channel.invokeMethod<void>(
+        'startKeepAlive',
+        <String, Object?>{'server': server ?? ''},
+      );
       appLog.info('PlatformBridge', 'foreground keep-alive запущен');
     } on PlatformException catch (e) {
       appLog.error('PlatformBridge', 'startKeepAlive', e);
@@ -111,6 +114,23 @@ class PlatformBridge {
       appLog.error('PlatformBridge', 'stopKeepAlive', e);
     } on MissingPluginException {
       // не Android/тесты
+    }
+  }
+
+  /// Активен ли сейчас любой VPN-интерфейс на устройстве.
+  ///
+  /// Android разрешает только один VPN: если true до нашего connect —
+  /// пользователю нужно выключить сторонний VPN.
+  Future<bool> isVpnActive() async {
+    try {
+      final active =
+          await _channel.invokeMethod<bool>('isVpnActive');
+      return active ?? false;
+    } on PlatformException catch (e) {
+      appLog.warn('PlatformBridge', 'isVpnActive: ${e.message}');
+      return false;
+    } on MissingPluginException {
+      return false;
     }
   }
 

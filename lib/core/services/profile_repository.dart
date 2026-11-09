@@ -140,3 +140,8 @@ class ProfileRepository {
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
   return ProfileRepository();
 });
+
+/// Провайдер списка профилей (обновляется через `ref.invalidate`).
+final profilesProvider = FutureProvider<List<ProfileEntity>>(
+  (ref) async => ref.read(profileRepositoryProvider).getAllProfiles(),
+);

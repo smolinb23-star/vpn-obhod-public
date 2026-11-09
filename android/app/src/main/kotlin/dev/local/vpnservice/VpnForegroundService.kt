@@ -31,8 +31,8 @@ class VpnForegroundService : Service() {
         private const val CHANNEL_NAME = "VPN-туннель"
         private const val NOTIFICATION_ID = 0x5651
 
-        private const val ACTION_ACCELERATE = "dev.local.vpnservice.ACCELERATE"
-        private const val ACTION_STOP = "dev.local.vpnservice.STOP"
+        const val ACTION_ACCELERATE = "dev.local.vpnservice.ACCELERATE"
+        const val ACTION_STOP = "dev.local.vpnservice.STOP"
 
         /** Текущий сервер для отображения в уведомлении. */
         @Volatile
@@ -45,6 +45,7 @@ class VpnForegroundService : Service() {
         fun start(context: Context, server: String) {
             currentServer = server
             val intent = Intent(context, VpnForegroundService::class.java)
+                .putExtra("server", server)
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
@@ -141,7 +142,7 @@ class VpnForegroundService : Service() {
             android.app.Notification.Builder(this)
         }
         return builder
-            .setContentTitle("VPN Подключен")
+            .setContentTitle("VPN активен")
             .setContentText("Сервер: $currentServer")
             .setSmallIcon(applicationInfo.icon)
             .setContentIntent(pendingOpen)

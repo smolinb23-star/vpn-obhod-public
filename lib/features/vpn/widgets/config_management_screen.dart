@@ -6,12 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:vpn_service/core/services/clash_yaml_parser.dart';
-import 'package:vpn_service/core/services/mihomo_service.dart';
-import 'package:vpn_service/core/services/profile_parser.dart';
 import 'package:vpn_service/core/services/profile_repository.dart';
-import 'package:vpn_service/core/services/wireguard_parser.dart';
-import 'package:vpn_service/core/services/xray_json_parser.dart';
 import 'package:vpn_service/features/vpn/vpn_controller.dart';
 
 /// Экран «Управление конфигами».
@@ -128,45 +123,23 @@ class _ConfigManagementScreenState
     try {
       await _saveLastConfig(input);
 
-      // Определяем тип конфига
-      String detectedType = 'other';
-      String name = 'Без имени';
-
-      if (WGConfigParser.looksLikeWireGuardConf(input)) {
-        final wg = const WGConfigParser().parse(input);
-        name = wg.name;
-        detectedType = 'awg';
-      } else if (ClashYamlParser.looksLikeClashYaml(input)) {
-        try {
-          final clashConfigs = const ClashYamlParser().parse(input);
-          if (clashConfigs.isNotEmpty) {
-            name = clashConfigs.first.remark;
-            detectedType = 'clash';
-          }
-        } on Object {
-          // ignore parse errors, will save as-is
-        }
-      } else if (XrayJsonParser.looksLikeWireGuardXrayJson(input)) {
-        detectedType = 'xray';
-        name = 'Xray JSON';
-      }
-
       final vpnCtrl = ref.read(vpnControllerProvider.notifier);
       final parsed = await vpnCtrl.importProfile(input);
-      if (parsed != null) {
-        name = parsed.remark;
-        detectedType = parsed.type;
+      ref.invalidate(profilesProvider);
+
+      if (parsed == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Не удалось распознать конфиг. '
+                  'Поддерживаются .conf, Clash YAML (wireguard), vless://.'),
+            ),
+          );
+        }
+        return;
       }
 
-      await ref.read(profileRepositoryProvider).saveProfile(ProfileEntity(
-        id: name.hashCode.toString(),
-        name: name,
-        rawConfig: input,
-        type: detectedType,
-        priority: 0,
-        enabled: true,
-      ));
-
+      final name = parsed.remark;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Конфиг «$name» сохранён')),
@@ -190,6 +163,7 @@ class _ConfigManagementScreenState
 
   Future<void> _deleteConfig(String id) async {
     await ref.read(profileRepositoryProvider).deleteProfile(id);
+    ref.invalidate(profilesProvider);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Конфиг удалён')),
@@ -199,10 +173,12 @@ class _ConfigManagementScreenState
 
   Future<void> _toggleEnabled(String id, bool value) async {
     await ref.read(profileRepositoryProvider).updateProfile(id, enabled: value);
+    ref.invalidate(profilesProvider);
   }
 
   Future<void> _setPriority(String id, int priority) async {
     await ref.read(profileRepositoryProvider).updateProfile(id, priority: priority);
+    ref.invalidate(profilesProvider);
   }
 
   @override
@@ -496,14 +472,9 @@ class _ConfigListTileState extends ConsumerState<_ConfigListTile> {
         enabled: widget.profile.enabled,
       ));
       await repo.deleteProfile(widget.profile.id);
+      ref.invalidate(profilesProvider);
     }
     if (mounted) setState(() => _editing = false);
   }
 }
 
-/// Провайдер списка профилей из sqflite.
-final profilesProvider = FutureProvider<List<ProfileEntity>>(
-  (ref) async {
-    return ref.read(profileRepositoryProvider).getAllProfiles();
-  },
-);

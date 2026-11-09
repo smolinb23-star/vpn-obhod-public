@@ -1,7 +1,9 @@
 package dev.local.vpnservice
 
 import android.content.Intent
-import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -12,6 +14,7 @@ class MainActivity : FlutterActivity() {
     private var awgBridge: AwgBridge? = null
     private var platformBridge: PlatformBridge? = null
     private var mihomoBridge: MihomoBridge? = null
+    private var vpnControlChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -68,27 +71,64 @@ class MainActivity : FlutterActivity() {
             binaryMessenger,
             "dev.local.vpnservice/vpn_control",
         )
+        this.vpnControlChannel = vpnControlChannel
         vpnControlChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "show_notification" -> {
                     val serverArg = call.arguments as? Map<*, *>
                     val server = serverArg?.get("server")?.toString() ?: ""
-                    val intent = Intent(this, VpnForegroundService::class.java)
-                        .putExtra("server", server)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        startForegroundService(intent)
-                    } else {
-                        startService(intent)
-                    }
+                    VpnForegroundService.start(this, server)
                     result.success(null)
                 }
                 "hide_notification" -> {
-                    stopService(Intent(this, VpnForegroundService::class.java))
+                    VpnForegroundService.stop(this)
                     result.success(null)
                 }
                 else -> result.notImplemented()
             }
         }
+
+        // Холодный старт по нажатию «Ускорить»/«Остановить» в уведомлении.
+        dispatchVpnAction(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        dispatchVpnAction(intent)
+    }
+
+    /**
+     * Кнопки уведомления открывают MainActivity с action; здесь действие
+     * пробрасывается в Dart (vpn_control) — disconnect/accelerate.
+     */
+    private fun dispatchVpnAction(intent: Intent?) {
+        val method = when (intent?.action) {
+            VpnForegroundService.ACTION_ACCELERATE -> "accelerate"
+            VpnForegroundService.ACTION_STOP -> "disconnect"
+            else -> return
+        }
+        val channel = vpnControlChannel ?: return
+        // Dart-обработчик регистрируется уже после первого кадра.
+        Handler(Looper.getMainLooper()).postDelayed({
+            try {
+                channel.invokeMethod(method, null, object : MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        Log.i("MainActivity", "vpn action $method → ok")
+                    }
+
+                    override fun error(code: String, message: String?, details: Any?) {
+                        Log.w("MainActivity", "vpn action $method failed: $code $message")
+                    }
+
+                    override fun notImplemented() {
+                        Log.w("MainActivity", "vpn action $method not implemented")
+                    }
+                })
+            } catch (e: Throwable) {
+                Log.w("MainActivity", "vpn action $method: ${e.message}")
+            }
+        }, 400)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -103,6 +143,7 @@ class MainActivity : FlutterActivity() {
         platformBridge = null
         mihomoBridge?.dispose()
         mihomoBridge = null
+        vpnControlChannel = null
         super.onDestroy()
     }
 }

@@ -43,7 +43,10 @@ class PlatformBridge(private val context: Context) {
             "getNetworkInfo" -> result.success(networkInfo())
             "forceLte" -> result.success(forceLte())
             "startKeepAlive" -> {
-                TunnelKeepAliveService.start(context)
+                TunnelKeepAliveService.start(
+                    context,
+                    call.argument<String>("server") ?: "",
+                )
                 result.success(null)
             }
             "stopKeepAlive" -> {
@@ -52,6 +55,7 @@ class PlatformBridge(private val context: Context) {
             }
             "dumpLogcat" -> dumpLogcat(call, result)
             "getInstalledApps" -> result.success(getInstalledApps())
+            "isVpnActive" -> result.success(isVpnActive())
             else -> result.notImplemented()
         }
     }
@@ -194,6 +198,19 @@ class PlatformBridge(private val context: Context) {
 
     fun dispose() {
         executor.shutdownNow()
+    }
+
+    /** Активен ли сейчас любой VPN-интерфейс (свой или сторонний). */
+    private fun isVpnActive(): Boolean {
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val network = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(network) ?: return false
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+        } catch (e: Throwable) {
+            Log.w(TAG, "isVpnActive failed: ${e.message}")
+            false
+        }
     }
 
     /** Возвращает JSON-массив установленных приложений: [{name, package, icon_base64}]. */

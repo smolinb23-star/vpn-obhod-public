@@ -1,23 +1,20 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 
-import 'package:vpn_service/core/models/vpn_config.dart';
 import 'package:vpn_service/core/services/profile_repository.dart';
 import 'package:vpn_service/features/vpn/services/vpn_service.dart';
 import 'package:vpn_service/features/vpn/vpn_controller.dart';
 import 'package:vpn_service/features/vpn/widgets/config_management_screen.dart';
 import 'package:vpn_service/features/vpn/widgets/split_tunneling_screen.dart';
 
-/// Главный экран Mihomo VPN.
+/// Главный экран VPN.
 ///
-/// - Большая кнопка «Подключиться».
-/// - Список серверов с флагами стран.
-/// - Выпадающий список выбора конфига (страна).
-/// - Статус «Подключено через [имя лучшего сервера]».
-/// - Кнопка «Сбросить / Остановить» для жёсткого отключения.
-/// - Нет сложных настроек (I1, MTU) на главном экране.
+/// - Большая кнопка «Подключиться / Отключиться».
+/// - Выпадающий список сохранённых серверов (страны/флаги) — выбор
+///   принудительно подключает именно этот сервер.
+/// - Красная кнопка «Остановить» (жёсткий сброс VPN).
+/// - Баннер ошибки (таймаут / TUN / разрешение).
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -27,98 +24,93 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _busy = false;
-  VpnConfig? _selectedConfig;
+  String? _selectedId;
 
-  @override
-  void initState() {
-    super.initState();
-    // Автоподключение при запуске если есть профили.
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final profiles = await ref.read(profilesProvider.future);
-      if (profiles.isNotEmpty && mounted) {
-        // Выбираем первый профиль по умолчанию
-        _selectedConfig = VpnConfig(
-          remark: profiles.first.name,
-          protocol: ProfileProtocol.values.firstWhere(
-            (p) => p.name == profiles.first.type,
-            orElse: () => ProfileProtocol.other,
-          ),
-          xrayJson: profiles.first.rawConfig,
-          profileType: ProfileType.values.firstWhere(
-            (p) => p.name == profiles.first.type,
-            orElse: () => ProfileType.other,
-          ),
-          rawConfig: profiles.first.rawConfig,
-          type: profiles.first.type,
-        );
-        await _connect();
+  Future<void> _requestNotificationPermission() async {
+    try {
+      final status = await Permission.notification.status;
+      if (!status.isGranted) {
+        await Permission.notification.request();
       }
-    });
+    } on Object {
+      // На старых Android разрешение не нужно.
+    }
   }
 
-  Future<void> _connect() async {
+  Future<void> _connectProfile(ProfileEntity profile) async {
     if (_busy) return;
-    setState(() => _busy = true);
-
-    final controller = ref.read(vpnControllerProvider.notifier);
-    await controller.autoConnect();
-
-    if (mounted) setState(() => _busy = false);
+    setState(() {
+      _busy = true;
+      _selectedId = profile.id;
+    });
+    await _requestNotificationPermission();
+    try {
+      await ref.read(vpnControllerProvider.notifier).connectProfile(profile);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _connectSelected() async {
     if (_busy) return;
-    setState(() => _busy = true);
-
-    final controller = ref.read(vpnControllerProvider.notifier);
-    if (_selectedConfig != null) {
-      await controller.connect(_selectedConfig!);
-    } else {
-      await controller.autoConnect();
+    final profiles = await ref.read(profilesProvider.future);
+    if (profiles.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Нет серверов. Добавьте конфиг в управлении.'),
+          ),
+        );
+      }
+      return;
     }
-
-    if (mounted) setState(() => _busy = false);
+    final selected = profiles.firstWhere(
+      (p) => p.id == _selectedId,
+      orElse: () => profiles.first,
+    );
+    await _connectProfile(selected);
   }
 
   Future<void> _disconnect() async {
     if (_busy) return;
     setState(() => _busy = true);
-
-    final controller = ref.read(vpnControllerProvider.notifier);
-    await controller.disconnect();
-
-    if (mounted) setState(() => _busy = false);
+    try {
+      await ref.read(vpnControllerProvider.notifier).disconnect();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
-  /// Жёсткий сброс: отключает VPN и убивает нативный процесс.
-  Future<void> _hardReset() async {
+  /// Жёсткий сброс: отключает VPN, убивает нативный туннель и уведомление.
+  Future<void> _forceStop() async {
     if (_busy) return;
     setState(() => _busy = true);
-
-    final controller = ref.read(vpnControllerProvider.notifier);
-    await controller.hardReset();
-
-    if (mounted) {
-      setState(() => _busy = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('VPN полностью остановлен'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+    try {
+      await ref.read(vpnControllerProvider.notifier).forceResetVpn();
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('VPN полностью остановлен'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = ref.watch(vpnControllerProvider);
+    final profilesAsync = ref.watch(profilesProvider);
     final theme = Theme.of(context);
     final connected = ui.state == TunnelState.connected;
     final connecting = ui.state == TunnelState.connecting;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('VPN · Mihomo'),
+        title: const Text('VPN · Обход'),
         actions: [
           IconButton(
             tooltip: 'Управление конфигами',
@@ -137,27 +129,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Статус подключения.
               Text(
                 connected
-                    ? 'Подключено'
-                    : (connecting ? 'Подключение…' : 'Отключено'),
+                    ? 'VPN активен'
+                    : (connecting
+                        ? 'Подключение…'
+                        : (ui.state == TunnelState.error
+                            ? 'Ошибка'
+                            : 'Отключено')),
                 style: theme.textTheme.headlineSmall
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               if (ui.currentServer.isNotEmpty)
                 Text(
-                  connected
-                      ? 'Через ${ui.currentServer}'
-                      : (ui.remark.isNotEmpty ? ui.remark : 'Готово'),
+                  connected ? 'Через ${ui.currentServer}' : ui.remark,
                   style: theme.textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
                 ),
+              if (ui.ipAfter != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'IP: ${ui.ipAfter}',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
               const SizedBox(height: 12),
-              // Выпадающий список конфигов.
-              const _ConfigSelector(),
+              _ConfigSelector(
+                profilesAsync: profilesAsync,
+                selectedId: _selectedId,
+                enabled: !_busy &&
+                    !connecting &&
+                    ui.state != TunnelState.connected,
+                onSelected: _connectProfile,
+              ),
+              if (ui.error != null) ...[
+                const SizedBox(height: 16),
+                _ErrorBanner(message: ui.error!),
+              ],
               const SizedBox(height: 24),
-              // Большая кнопка подключения.
               GestureDetector(
                 onTap: connecting || _busy
                     ? null
@@ -203,7 +213,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              // Кнопки управления.
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -214,45 +223,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       label: const Text('Отключиться'),
                     ),
                     const SizedBox(width: 12),
-                    OutlinedButton.icon(
-                      onPressed: _busy ? null : _hardReset,
-                      icon: const Icon(Icons.power_settings_new, color: Colors.red),
-                      label: const Text(
-                        'Сбросить',
-                        style: TextStyle(color: Colors.red),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                      ),
-                    ),
-                  ] else ...[
-                    OutlinedButton.icon(
-                      onPressed: _busy ? null : _hardReset,
-                      icon: const Icon(Icons.power_settings_new, color: Colors.grey),
-                      label: const Text('Сбросить'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.grey,
-                      ),
-                    ),
                   ],
+                  FilledButton.icon(
+                    onPressed: _busy ? null : _forceStop,
+                    icon: const Icon(Icons.power_settings_new),
+                    label: const Text('Остановить'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 24),
-              // Список серверов.
-              const _ServerList(),
-              const SizedBox(height: 24),
-              // Индикатор раздельного туннелирования.
-              if (ui.state == TunnelState.connected) ...[
+              _ServerList(
+                profilesAsync: profilesAsync,
+                selectedId: _selectedId,
+                enabled: !_busy && !connecting,
+                onSelected: _connectProfile,
+              ),
+              if (connected) ...[
+                const SizedBox(height: 16),
                 OutlinedButton.icon(
-                  onPressed: _busy ? null : () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const SplitTunnelingScreen(),
-                    ),
-                  ),
+                  onPressed: _busy
+                      ? null
+                      : () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const SplitTunnelingScreen(),
+                            ),
+                          ),
                   icon: const Icon(Icons.apps),
                   label: const Text('Исключённые приложения'),
                 ),
-                const SizedBox(height: 16),
               ],
             ],
           ),
@@ -262,14 +264,55 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-/// Выпадающий список конфигов со странами.
-class _ConfigSelector extends ConsumerWidget {
-  const _ConfigSelector();
+/// Баннер ошибки подключения.
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.message});
+
+  final String message;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final profilesAsync = ref.watch(profilesProvider);
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.error_outline, color: Colors.red.shade700),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: Colors.red.shade900),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
+/// Выпадающий список конфигов со странами.
+class _ConfigSelector extends StatelessWidget {
+  const _ConfigSelector({
+    required this.profilesAsync,
+    required this.selectedId,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  final AsyncValue<List<ProfileEntity>> profilesAsync;
+  final String? selectedId;
+  final bool enabled;
+  final ValueChanged<ProfileEntity> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
     return profilesAsync.when(
       data: (profiles) {
         if (profiles.isEmpty) {
@@ -278,140 +321,122 @@ class _ConfigSelector extends ConsumerWidget {
             style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
           );
         }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Серверы (${profiles.length}):',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            DropdownButton<String>(
+        final ids = profiles.map((p) => p.id).toSet();
+        final value = ids.contains(selectedId) ? selectedId : null;
+        return InputDecorator(
+          decoration: const InputDecoration(
+            labelText: 'Сервер (страна)',
+            border: OutlineInputBorder(),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
               isExpanded: true,
-              value: null,
               hint: const Text('Выберите сервер…'),
               items: profiles.map((profile) {
-                final flag = _flagForName(profile.name);
                 return DropdownMenuItem<String>(
-                  value: profile.name,
+                  value: profile.id,
                   child: Row(
                     children: [
-                      Text(flag, style: const TextStyle(fontSize: 20)),
+                      Text(flagForName(profile.name),
+                          style: const TextStyle(fontSize: 20)),
                       const SizedBox(width: 8),
-                      Text(profile.name),
+                      Expanded(
+                        child: Text(
+                          profile.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                 );
               }).toList(),
-              onChanged: null, // Выбор через _ServerList
+              onChanged: enabled
+                  ? (id) {
+                      final profile = profiles.firstWhere((p) => p.id == id);
+                      onSelected(profile);
+                    }
+                  : null,
             ),
-          ],
+          ),
         );
       },
-      loading: () => const CircularProgressIndicator(),
+      loading: () => const Padding(
+        padding: EdgeInsets.all(8),
+        child: CircularProgressIndicator(),
+      ),
       error: (e, st) => Text('Ошибка загрузки серверов: $e'),
     );
-  }
-
-  String _flagForName(String name) {
-    final upper = name.toUpperCase();
-    const codes = <String, String>{
-      'PL': '🇵🇱', 'NL': '🇳🇱', 'FI': '🇫🇮', 'RU': '🇷🇺', 'US': '🇺🇸',
-      'DE': '🇩🇪', 'FR': '🇫🇷', 'GB': '🇬🇧', 'JP': '🇯🇵', 'SG': '🇸🇬',
-      'HK': '🇭🇰', 'KR': '🇰🇷', 'CA': '🇨🇦', 'AU': '🇦🇺', 'CH': '🇨🇭',
-      'SE': '🇸🇪', 'NO': '🇳🇴', 'DK': '🇩🇰', 'IE': '🇮🇪', 'ES': '🇪🇸',
-      'IT': '🇮🇹', 'PT': '🇵🇹', 'BR': '🇧🇷', 'AR': '🇦🇷', 'MX': '🇲🇽',
-      'IN': '🇮🇳', 'ID': '🇮🇩', 'TH': '🇹🇭', 'VN': '🇻🇳', 'TR': '🇹🇷',
-      'AE': '🇦🇪', 'SA': '🇸🇦', 'IL': '🇮🇱', 'ZA': '🇿🇦', 'EG': '🇪🇬',
-    };
-    for (final entry in codes.entries) {
-      if (upper.contains(entry.key)) return entry.value;
-    }
-    return '🌐';
   }
 }
 
 /// Список серверов из сохранённых профилей.
-class _ServerList extends ConsumerWidget {
-  const _ServerList();
+class _ServerList extends StatelessWidget {
+  const _ServerList({
+    required this.profilesAsync,
+    required this.selectedId,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  final AsyncValue<List<ProfileEntity>> profilesAsync;
+  final String? selectedId;
+  final bool enabled;
+  final ValueChanged<ProfileEntity> onSelected;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final profilesAsync = ref.watch(profilesProvider);
-
+  Widget build(BuildContext context) {
     return profilesAsync.when(
       data: (profiles) {
-        if (profiles.isEmpty) {
-          return const Text(
-            'Нет серверов. Добавьте конфиг в управлении.',
-            style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
-          );
-        }
-
+        if (profiles.isEmpty) return const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Серверы (${profiles.length}):',
+              'Сохранённые серверы (${profiles.length}):',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
             ...profiles.map((profile) {
-              final flag = _flagForName(profile.name);
+              final selected = profile.id == selectedId;
               return ListTile(
-                leading: Text(flag, style: const TextStyle(fontSize: 24)),
+                leading: Text(flagForName(profile.name),
+                    style: const TextStyle(fontSize: 24)),
                 title: Text(profile.name),
                 subtitle: Text(profile.type.toUpperCase()),
                 trailing: Icon(
-                  profile.enabled
-                      ? Icons.check_circle
-                      : Icons.check_circle_outline,
-                  color: profile.enabled ? Colors.green : Colors.grey,
+                  selected ? Icons.check_circle : Icons.chevron_right,
+                  color: selected ? Colors.green : null,
                 ),
-                onTap: () async {
-                  await ref.read(profileRepositoryProvider).updateProfile(
-                        profile.id,
-                        priority: 0,
-                      );
-                  // Подключаемся к выбранному серверу.
-                  final controller = ref.read(vpnControllerProvider.notifier);
-                  await controller.connect(VpnConfig(
-                    remark: profile.name,
-                    protocol: ProfileProtocol.other,
-                    xrayJson: profile.rawConfig,
-                    profileType: ProfileType.values.firstWhere(
-                      (p) => p.name == profile.type,
-                      orElse: () => ProfileType.other,
-                    ),
-                    rawConfig: profile.rawConfig,
-                    type: profile.type,
-                  ));
-                },
+                enabled: enabled,
+                onTap: enabled ? () => onSelected(profile) : null,
               );
             }),
           ],
         );
       },
-      loading: () => const CircularProgressIndicator(),
+      loading: () => const SizedBox.shrink(),
       error: (e, st) => Text('Ошибка загрузки серверов: $e'),
     );
   }
+}
 
-  String _flagForName(String name) {
-    final upper = name.toUpperCase();
-    const codes = <String, String>{
-      'PL': '🇵🇱', 'NL': '🇳🇱', 'FI': '🇫🇮', 'RU': '🇷🇺', 'US': '🇺🇸',
-      'DE': '🇩🇪', 'FR': '🇫🇷', 'GB': '🇬🇧', 'JP': '🇯🇵', 'SG': '🇸🇬',
-      'HK': '🇭🇰', 'KR': '🇰🇷', 'CA': '🇨🇦', 'AU': '🇦🇺', 'CH': '🇨🇭',
-      'SE': '🇸🇪', 'NO': '🇳🇴', 'DK': '🇩🇰', 'IE': '🇮🇪', 'ES': '🇪🇸',
-      'IT': '🇮🇹', 'PT': '🇵🇹', 'BR': '🇧🇷', 'AR': '🇦🇷', 'MX': '🇲🇽',
-      'IN': '🇮🇳', 'ID': '🇮🇩', 'TH': '🇹🇭', 'VN': '🇻🇳', 'TR': '🇹🇷',
-      'AE': '🇦🇪', 'SA': '🇸🇦', 'IL': '🇮🇱', 'ZA': '🇿🇦', 'EG': '🇪🇬',
-    };
-    for (final entry in codes.entries) {
-      if (upper.contains(entry.key)) return entry.value;
-    }
-    return '🌐';
+/// Флаг страны по коду в имени сервера (🇳🇱 Нидерланды и т.п.).
+String flagForName(String name) {
+  final upper = name.toUpperCase();
+  const codes = <String, String>{
+    'PL': '🇵🇱', 'NL': '🇳🇱', 'FI': '🇫🇮', 'RU': '🇷🇺', 'US': '🇺🇸',
+    'DE': '🇩🇪', 'FR': '🇫🇷', 'GB': '🇬🇧', 'UK': '🇬🇧', 'JP': '🇯🇵',
+    'SG': '🇸🇬', 'HK': '🇭🇰', 'KR': '🇰🇷', 'CA': '🇨🇦', 'AU': '🇦🇺',
+    'CH': '🇨🇭', 'SE': '🇸🇪', 'NO': '🇳🇴', 'DK': '🇩🇰', 'IE': '🇮🇪',
+    'ES': '🇪🇸', 'IT': '🇮🇹', 'PT': '🇵🇹', 'BR': '🇧🇷', 'AR': '🇦🇷',
+    'MX': '🇲🇽', 'IN': '🇮🇳', 'ID': '🇮🇩', 'TH': '🇹🇭', 'VN': '🇻🇳',
+    'TR': '🇹🇷', 'AE': '🇦🇪', 'SA': '🇸🇦', 'IL': '🇮🇱', 'ZA': '🇿🇦',
+    'EG': '🇪🇬', 'LV': '🇱🇻', 'LT': '🇱🇹', 'EE': '🇪🇪', 'UA': '🇺🇦',
+    'KZ': '🇰🇿', 'AM': '🇦🇲', 'GE': '🇬🇪', 'MD': '🇲🇩', 'RO': '🇷🇴',
+  };
+  for (final entry in codes.entries) {
+    if (upper.contains(entry.key)) return entry.value;
   }
+  return '🌐';
 }

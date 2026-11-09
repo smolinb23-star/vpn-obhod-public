@@ -38,10 +38,20 @@ class TunnelKeepAliveService : Service() {
         @Volatile
         private var tunnelUp: Boolean = false
 
+        /** Имя активного сервера для текста уведомления. */
+        @Volatile
+        private var currentServer: String = ""
+
         fun start(context: Context) {
+            start(context, "")
+        }
+
+        fun start(context: Context, server: String) {
             tunnelUp = true
+            if (server.isNotEmpty()) currentServer = server
             val intent = Intent(context, TunnelKeepAliveService::class.java)
                 .setAction(ACTION_START)
+                .putExtra("server", server)
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
@@ -80,6 +90,8 @@ class TunnelKeepAliveService : Service() {
                 return START_NOT_STICKY
             }
             else -> {
+                val server = intent?.getStringExtra("server") ?: ""
+                if (server.isNotEmpty()) currentServer = server
                 startForegroundCompat()
                 Log.i(TAG, "foreground started, sticky")
             }
@@ -118,6 +130,33 @@ class TunnelKeepAliveService : Service() {
             launch,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+
+        val accelerate = Intent(this, MainActivity::class.java)
+            .setAction(VpnForegroundService.ACTION_ACCELERATE)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val pendingAccelerate = PendingIntent.getActivity(
+            this,
+            1,
+            accelerate,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val stop = Intent(this, MainActivity::class.java)
+            .setAction(VpnForegroundService.ACTION_STOP)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val pendingStop = PendingIntent.getActivity(
+            this,
+            2,
+            stop,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val text = if (currentServer.isNotEmpty()) {
+            "Сервер: $currentServer"
+        } else {
+            "AmneziaWG · защищённое соединение"
+        }
+
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
         } else {
@@ -125,10 +164,12 @@ class TunnelKeepAliveService : Service() {
             Notification.Builder(this)
         }
         return builder
-            .setContentTitle("VPN-туннель активен")
-            .setContentText("AmneziaWG · защищённое соединение")
+            .setContentTitle("VPN активен")
+            .setContentText(text)
             .setSmallIcon(applicationInfo.icon)
             .setContentIntent(pending)
+            .addAction(R.drawable.ic_launcher, "Ускорить", pendingAccelerate)
+            .addAction(android.R.drawable.ic_delete, "Остановить", pendingStop)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setShowWhen(false)
