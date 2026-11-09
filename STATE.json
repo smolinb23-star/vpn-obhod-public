@@ -1,11 +1,11 @@
 {
-  "stage": 4.3,
-  "stage_status": "done_native_app_picker_clash_yaml_xray_json_apk_delivered",
+  "stage": 5.0,
+  "stage_status": "done_mihomo_core_apk_delivered",
   "apk": {
     "local": "dist/app-release.apk",
-    "size_bytes": 0,
-    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-55f8ee15db3cf491ba4bc0edf3651c5ab985dd66",
-    "ci_run": 42507600505,
+    "size_bytes": 170926314,
+    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-71a8299b72c0d92956b17bd57e337c62e8dfe098",
+    "ci_run": 42574454484,
     "signing": "debug (release keystore — MANUAL)",
     "magic": "PK ZIP",
     "native_libs": "libam-go.so + libam-quick.so + libam.so (AWG) + libxray.so (VLESS) для arm64-v8a/armeabi-v7a/x86_64"
@@ -134,5 +134,5 @@
     "ui": "ConfImportScreen (иконка-скрепка в AppBar HomeScreen), также вставка .conf текстом",
     "gotcha": "Dart base64Decode отвергает неканонические ключи — тестовые ключи должны быть каноническим base64 от 32 случайных байт"
   },
-  "next_step": "Этап 4.3 завершён. Проверить на телефоне: нативный список приложений с иконками (не пустое поле), импорт Clash YAML с amnezia-wg-option (подключение через AmneziaWG), импорт Xray JSON с wireguard (подключение через WireGuard/Noise). Затем Этап 5 (звонки peer_rtc + Opus, офлайн-сообщения flutter_mesh_network, чат UI)"
+  "next_step": "Этап 5 завершён. Проверить на телефоне: импорт ClashWARP_19.yaml (10+ серверов), импорт deWARPv3_87.conf (AmneziaWG), автовыбор сервера через url-test, Split Tunneling с иконками, конфиги сохраняются после перезапуска. Затемможно переходить к следующему этапу или поддерживать текущий."
 }
