@@ -24,6 +24,13 @@
   3) Foreground Service: VpnForegroundService.kt с постоянным уведомлением в шторке (заголовок «VPN Подключен», текст «Сервер: <имя>», иконка щита), кнопка «Ускорить» (перезапускает url-test через Mihomo, Toast «Поиск лучшего сервера...»), кнопка «Остановить» (полностью отключает VPN, убирает уведомление). Регистрируется в AndroidManifest.xml.
   4) Главный экран: выпадающий список конфигов со странами и флагами (из импортированных профилей), кнопка «Сбросить / Остановить» (иконка питания, жёсткий сброс VPN). Сохранённые конфиги выбираются в списке и подключаются без авто-подбора.
   - apk: OK (dist/app-release.apk, CI 42590626917, release apk-d461e242669ee66fe2b98346693c29a7657b5fc2)
+- Этап 5.2 — DONE (код + APK) — Реальный TUN и рабочие действия уведомления:
+  1) MihomoBridge (заглушка, не поднимал VpnService/TUN) убран из пути подключения. Теперь `vpn_controller.dart` для awg/clash (WireGuard/AmneziaWG) вызывает нативный `AwgBridge` + AmneziaWG GoBackend (реальные `VpnService.prepare`/`establish`/TUN), для vless/xray — `flutter_vless` (нативный Xray VpnService). Таймаут 15 с → ошибка «Не удалось перехватить трафик».
+  2) Clash YAML распознаёт JSON-форму `{"proxies":...}`; каждый WireGuard/AmneziaWG-прокси сохраняется отдельным профилем (`parseWireGuardConfigs` + `proxyYamlByName`), поэтому выбор страны/сервера реальный. Обрабатываются `address/ip/ipv6`, `psk`, `mtu`, `dns`, WARP-дефолт 172.16.0.2/32.
+  3) Уведомление «VPN активен» с сервером и кнопками «Ускорить»/«Остановить» в `TunnelKeepAliveService`; действия идут через `MainActivity.onNewIntent` → MethodChannel `vpn_control` → Dart (`accelerate`/`disconnect`). Красная кнопка «Остановить» на главном экране → `forceResetVpn()`.
+  4) Главный экран: выпадающий список сохранённых серверов с флагами, ручной выбор принудительно подключает этот сервер (без авто-подбора), баннер ошибок, запрос POST_NOTIFICATIONS, нет авто-подключения при запуске. Стабильные id профилей `type-base64url(type|name)`.
+  5) Проверка активного стороннего VPN через `PlatformBridge.isVpnActive()` до connect.
+  - apk: OK (dist/app-release.apk, 171 164 042 байт, CI 42597210011, release apk-c028a4353a687ae5277f9a0b51b9ea4c1d6fa95f)
 - Этап 6 — next — Звонки peer_rtc + Opus, офлайн-сообщения flutter_mesh_network, чат UI
 
 ## Зеркало и доставка APK

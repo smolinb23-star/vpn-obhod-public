@@ -1,11 +1,11 @@
 {
   "stage": 5.2,
-  "stage_status": "done_traffic_intercept_foreground_stop_apk_delivered",
+  "stage_status": "done_real_tun_awg_xray_notification_actions_server_selector_apk_delivered",
   "apk": {
     "local": "dist/app-release.apk",
-    "size_bytes": 170939166,
-    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-d461e242669ee66fe2b98346693c29a7657b5fc2",
-    "ci_run": 42590626917,
+    "size_bytes": 171164042,
+    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-c028a4353a687ae5277f9a0b51b9ea4c1d6fa95f",
+    "ci_run": 42597210011,
     "signing": "debug (release keystore — MANUAL)",
     "magic": "PK ZIP",
     "native_libs": "libam-go.so + libam-quick.so + libam.so (AWG) + libxray.so (VLESS) для arm64-v8a/armeabi-v7a/x86_64"
@@ -24,7 +24,8 @@
     "public_16": "SUCCESS 5f46fd4 (3.4.1 Split Tunneling: device_apps dependency, SplitTunnelingScreen UI, excludedApps in VpnService.start(), PROGRESS/STATE updated; analyze + 92 dart + 9 kotlin + apk) -> APK 101756662",
     "public_17": "SUCCESS 55f8ee1 (Этап 4.3: нативный App Picker через PlatformBridge.getInstalledApps() (PackageManager, JSON с base64-иконками), ClashYamlParser (proxies→WireGuardConfig, amnezia-wg-option), XrayJsonParser (wireguard JSON с шумом), WGConfigParser/AwgConfBuilder расширены (I2-I5, ContentPaddingAddition, RekeyAfterTime, RejectAfterTime, MaxHandshakeAttempts), MASQUE→требует Sing-box; analyze + 92 dart + 9 kotlin + apk) -> APK TBD",
     "public_18": "SUCCESS d730872 (Этап 5.1: таймаут подключения 15 с в mihomo_service.dart + логирование этапов в vpn_controller.dart; VpnForegroundService.kt с уведомлением в шторке (заголовок 'VPN Подключен', текст 'Сервер: <имя>', кнопки 'Ускорить' (перезапуск url-test) и 'Остановить' (полный disconnect); кнопка 'Сбросить / Остановить' на главном экране; analyze + 92 dart + 9 kotlin + apk) -> APK TBD",
-    "public_19": "SUCCESS d461e24 (Этап 5.1.2: TUN трафик - stack: system, auto_route, auto_detect_interface в интерфейсе; tcp fast_open + sniffer + enhanced_mode fake-ip в experimental; таймаут подключения 15 с с логированием этапов; VpnForegroundService.kt с уведомлением (Ускорить/Остановить); кнопка Сбросить/Остановить + выпадающий список конфигов со странами на главном экране; analyze + 92 dart + 9 kotlin + apk) -> APK 170939166"
+    "public_19": "SUCCESS d461e24 (Этап 5.1.2: TUN трафик - stack: system, auto_route, auto_detect_interface в интерфейсе; tcp fast_open + sniffer + enhanced_mode fake-ip в experimental; таймаут подключения 15 с с логированием этапов; VpnForegroundService.kt с уведомлением (Ускорить/Остановить); кнопка Сбросить/Остановить + выпадающий список конфигов со странами на главном экране; analyze + 92 dart + 9 kotlin + apk) -> APK 170939166",
+    "public_20": "SUCCESS c028a43 (Этап 5.2: MihomoBridge-заглушка убрана из пути подключения; awg/clash -> нативный AwgBridge + AmneziaWG GoBackend (реальный VpnService/TUN), vless/xray -> flutter_vless; Clash YAML -> отдельный профиль на каждый WireGuard-прокси (JSON-форма, address/ip/ipv6, psk, mtu, dns), стабильные id; уведомление 'VPN активен' с 'Ускорить'/'Остановить' через TunnelKeepAliveService + MainActivity.onNewIntent -> MethodChannel vpn_control -> Dart; forceResetVpn на красной кнопке; выбор сервера принудительный, без авто-подключения; PlatformBridge.isVpnActive; analyze + 92 dart + 9 kotlin + apk) -> APK 171164042"
   },
   "chosen_branches": {
     "vpn_core": "flutter_vless ^1.1.7",
@@ -136,5 +137,5 @@
     "ui": "ConfImportScreen (иконка-скрепка в AppBar HomeScreen), также вставка .conf текстом",
     "gotcha": "Dart base64Decode отвергает неканонические ключи — тестовые ключи должны быть каноническим base64 от 32 случайных байт"
   },
-  "next_step": "Этап 5.1 завершён: таймаут подключения 15 с (Mihomo не ушёл в Connected → ошибка), Foreground Service с уведомлением (Ускорить/Остановить), кнопка Сбросить/Остановить на главном экране. Дальше: тестирование на телефоне (ClashWARP_19.yaml 10+ серверов, deWARPv3_87.conf AmneziaWG, автовыбор сервера через url-test, Split Tunneling с иконками, конфиги сохраняются после перезапуска), затем следующий этап."
+  "next_step": "Этап 5.2 завершён: реальный TUN (AWG GoBackend / flutter_vless), уведомление с рабочими «Ускорить»/«Остановить», принудительный выбор сервера и жёсткая остановка. Дальше: установить dist/app-release.apk и проверить на телефоне смену публичного IP на 2ip.ru за 5–10 с, отсутствие ошибок TUN/VpnService в logcat, кнопки уведомления, выбор страны; затем Этап 6."
 }
