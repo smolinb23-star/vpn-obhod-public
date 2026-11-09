@@ -67,6 +67,7 @@ class MihomoUiState {
 ///  - start(configJson) — запуск туннеля с JSON-конфигом Mihomo
 ///  - stop — остановка
 ///  - getStatus — текущий статус
+///  - accelerate — перезапуск url-test (поиск лучшего сервера)
 ///  - generateConfig — генерация Mihomo JSON из импортированного конфига
 class MihomoService {
   MihomoService._();
@@ -165,7 +166,7 @@ class MihomoService {
   /// Генерирует Mihomo JSON-конфиг из импортированного профиля.
   ///
   /// Поддерживает:
-  ///  - Clash/Mihomo YAML (сグループ url-test для автовыбора сервера)
+  ///  - Clash/Mihomo YAML (с группой url-test для автовыбора сервера)
   ///  - Xray JSON (WireGuard + Noise)
   ///  - AmneziaWG .conf (Jc, Jmin, H1-H4, I1-I5 и т.д.)
   ///  - VLESS / Hysteria2 / другие протоколы через sing-box
@@ -179,6 +180,7 @@ class MihomoService {
   }
 
   void dispose() {
+    _connectTimeoutTimer?.cancel();
     _stateCtrl.close();
   }
 }
@@ -248,11 +250,8 @@ class _MihomoConfigGenerator {
       'dns': <String, dynamic>{
         'servers': <String, dynamic>{
           'local': [
-            {
-              'address': '1.1.1.1',
-              'address_resolver': '1.1.1.1',
-              'strategy': 'ipv4_only',
-            },
+            {'address': '1.1.1.1', 'address_resolver': '1.1.1.1', 'strategy': 'ipv4_only'},
+            {'address': '8.8.8.8', 'address_resolver': '8.8.8.8', 'strategy': 'ipv4_only'},
           ],
         },
         'rules': <dynamic>[
@@ -260,6 +259,7 @@ class _MihomoConfigGenerator {
         ],
         'final': 'local',
         'independent_cache': true,
+        'enhanced_mode': 'fake-ip',
       },
       'inbounds': <dynamic>[
         <String, dynamic>{
@@ -268,6 +268,7 @@ class _MihomoConfigGenerator {
           'address': <dynamic>['172.19.0.1/30'],
           'auto_route': true,
           'strict_route': true,
+          'stack': 'system',
         },
       ],
       'outbounds': <dynamic>[
@@ -296,6 +297,18 @@ class _MihomoConfigGenerator {
         'cache_file': <String, dynamic>{
           'enabled': true,
           'path': 'cache.db',
+        },
+        'tun': <String, dynamic>{
+          'enable': true,
+          'stack': 'system',
+          'auto_route': true,
+          'strict_route': true,
+        },
+        'tcp': <String, dynamic>{
+          'fast_open': true,
+        },
+        'sniffer': <String, dynamic>{
+          'enable': true,
         },
       },
     };
@@ -337,9 +350,11 @@ class _MihomoConfigGenerator {
           'servers': <String, dynamic>{
             'local': [
               {'address': '1.1.1.1', 'strategy': 'ipv4_only'},
+              {'address': '8.8.8.8', 'strategy': 'ipv4_only'},
             ],
           },
           'final': 'local',
+          'enhanced_mode': 'fake-ip',
         },
         'inbounds': <dynamic>[
           <String, dynamic>{
@@ -348,6 +363,7 @@ class _MihomoConfigGenerator {
             'address': <dynamic>['172.19.0.1/30'],
             'auto_route': true,
             'strict_route': true,
+            'stack': 'system',
           },
         ],
         'outbounds': <dynamic>[
@@ -358,6 +374,15 @@ class _MihomoConfigGenerator {
         'route': <String, dynamic>{
           'rules': rules,
           'final': 'proxy',
+          'auto_detect_interface': true,
+        },
+        'experimental': <String, dynamic>{
+          'tcp': <String, dynamic>{
+            'fast_open': true,
+          },
+          'sniffer': <String, dynamic>{
+            'enable': true,
+          },
         },
       };
 
@@ -441,6 +466,7 @@ class _MihomoConfigGenerator {
           'local': [{'address': dns, 'strategy': 'ipv4_only'}],
         },
         'final': 'local',
+        'enhanced_mode': 'fake-ip',
       },
       'inbounds': <dynamic>[
         <String, dynamic>{
@@ -449,6 +475,7 @@ class _MihomoConfigGenerator {
           'address': <dynamic>['172.19.0.1/30'],
           'auto_route': true,
           'strict_route': true,
+          'stack': 'system',
         },
       ],
       'outbounds': <dynamic>[
@@ -459,6 +486,15 @@ class _MihomoConfigGenerator {
       'route': <String, dynamic>{
         'rules': rules,
         'final': 'proxy',
+        'auto_detect_interface': true,
+      },
+      'experimental': <String, dynamic>{
+        'tcp': <String, dynamic>{
+          'fast_open': true,
+        },
+        'sniffer': <String, dynamic>{
+          'enable': true,
+        },
       },
     };
 
@@ -488,6 +524,7 @@ class _MihomoConfigGenerator {
           'local': [{'address': '1.1.1.1', 'strategy': 'ipv4_only'}],
         },
         'final': 'local',
+        'enhanced_mode': 'fake-ip',
       },
       'inbounds': <dynamic>[
         <String, dynamic>{
@@ -496,6 +533,7 @@ class _MihomoConfigGenerator {
           'address': <dynamic>['172.19.0.1/30'],
           'auto_route': true,
           'strict_route': true,
+          'stack': 'system',
         },
       ],
       'outbounds': <dynamic>[
@@ -510,6 +548,14 @@ class _MihomoConfigGenerator {
               ]
             : <Map<String, dynamic>>[{'type': 'match', 'outboundTag': 'proxy'}],
         'final': 'proxy',
+      },
+      'experimental': <String, dynamic>{
+        'tcp': <String, dynamic>{
+          'fast_open': true,
+        },
+        'sniffer': <String, dynamic>{
+          'enable': true,
+        },
       },
     };
 

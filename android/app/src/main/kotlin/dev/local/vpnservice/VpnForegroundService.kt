@@ -1,16 +1,13 @@
 package dev.local.vpnservice
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+
+import io.flutter.plugin.common.MethodChannel
 
 /**
  * Foreground Service с уведомлением в шторке Android.
@@ -22,7 +19,7 @@ import android.util.Log
  * Кнопки уведомления отправляют Intent в MainActivity с действиями:
  *   - dev.local.vpnservice.ACCELERATE
  *   - dev.local.vpnservice.STOP
- * MainAddress.onNewIntent() обрабатывает эти действия и вызывает методы Flutter.
+ * MainActivity.onNewIntent() обрабатывает эти действия и вызывает методы Flutter.
  */
 class VpnForegroundService : Service() {
 
@@ -156,16 +153,19 @@ class VpnForegroundService : Service() {
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
+        val channel = android.app.NotificationChannel(
             CHANNEL_ID,
             CHANNEL_NAME,
-            NotificationManager.IMPORTANCE_LOW,
+            android.app.NotificationManager.IMPORTANCE_LOW,
         ).apply {
             description = "Уведомление активного VPN-туннеля с кнопками управления"
             setShowBadge(false)
         }
         manager.createNotificationChannel(channel)
+    }
+
+    fun dispose() {
     }
 }

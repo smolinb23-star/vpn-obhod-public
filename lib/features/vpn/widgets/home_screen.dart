@@ -13,8 +13,10 @@ import 'package:vpn_service/features/vpn/widgets/split_tunneling_screen.dart';
 /// Главный экран Mihomo VPN.
 ///
 /// - Большая кнопка «Подключиться».
-/// - Список серверов с иконками стран.
+/// - Список серверов с флагами стран.
+/// - Выпадающий список выбора конфига (страна).
 /// - Статус «Подключено через [имя лучшего сервера]».
+/// - Кнопка «Сбросить / Остановить» для жёсткого отключения.
 /// - Нет сложных настроек (I1, MTU) на главном экране.
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -25,6 +27,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _busy = false;
+  VpnConfig? _selectedConfig;
 
   @override
   void initState() {
@@ -33,6 +36,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final profiles = await ref.read(profilesProvider.future);
       if (profiles.isNotEmpty && mounted) {
+        // Выбираем первый профиль по умолчанию
+        _selectedConfig = VpnConfig(
+          remark: profiles.first.name,
+          protocol: ProfileProtocol.values.firstWhere(
+            (p) => p.name == profiles.first.type,
+            orElse: () => ProfileProtocol.other,
+          ),
+          xrayJson: profiles.first.rawConfig,
+          profileType: ProfileType.values.firstWhere(
+            (p) => p.name == profiles.first.type,
+            orElse: () => ProfileType.other,
+          ),
+          rawConfig: profiles.first.rawConfig,
+          type: profiles.first.type,
+        );
         await _connect();
       }
     });
@@ -44,6 +62,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final controller = ref.read(vpnControllerProvider.notifier);
     await controller.autoConnect();
+
+    if (mounted) setState(() => _busy = false);
+  }
+
+  Future<void> _connectSelected() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+
+    final controller = ref.read(vpnControllerProvider.notifier);
+    if (_selectedConfig != null) {
+      await controller.connect(_selectedConfig!);
+    } else {
+      await controller.autoConnect();
+    }
 
     if (mounted) setState(() => _busy = false);
   }
@@ -121,12 +153,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       : (ui.remark.isNotEmpty ? ui.remark : 'Готово'),
                   style: theme.textTheme.bodyMedium,
                 ),
+              const SizedBox(height: 12),
+              // Выпадающий список конфигов.
+              const _ConfigSelector(),
               const SizedBox(height: 24),
               // Большая кнопка подключения.
               GestureDetector(
                 onTap: connecting || _busy
                     ? null
-                    : (connected ? _disconnect : _connect),
+                    : (connected ? _disconnect : _connectSelected),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   width: 200,
@@ -168,45 +203,132 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 24),
+              // Кнопки управления.
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (connected) ...[
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _disconnect,
+                      icon: const Icon(Icons.link_off),
+                      label: const Text('Отключиться'),
+                    ),
+                    const SizedBox(width: 12),
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _hardReset,
+                      icon: const Icon(Icons.power_settings_new, color: Colors.red),
+                      label: const Text(
+                        'Сбросить',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                      ),
+                    ),
+                  ] else ...[
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _hardReset,
+                      icon: const Icon(Icons.power_settings_new, color: Colors.grey),
+                      label: const Text('Сбросить'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 24),
               // Список серверов.
               const _ServerList(),
               const SizedBox(height: 24),
               // Индикатор раздельного туннелирования.
               if (ui.state == TunnelState.connected) ...[
                 OutlinedButton.icon(
-                  onPressed: _busy ? null : _disconnect,
-                  icon: const Icon(Icons.link_off),
-                  label: const Text('Отключиться'),
-                ),
-                const SizedBox(height: 8),
-                // Кнопка полного сброса
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : _hardReset,
-                  icon: const Icon(Icons.power_settings_new, color: Colors.red),
-                  label: const Text(
-                    'Сбросить / Остановить',
-                    style: TextStyle(color: Colors.red),
+                  onPressed: _busy ? null : () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const SplitTunnelingScreen(),
+                    ),
                   ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                  ),
+                  icon: const Icon(Icons.apps),
+                  label: const Text('Исключённые приложения'),
                 ),
                 const SizedBox(height: 16),
               ],
-              TextButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const SplitTunnelingScreen(),
-                  ),
-                ),
-                icon: const Icon(Icons.apps),
-                label: const Text('Исключённые приложения'),
-              ),
             ],
           ),
         ),
       ),
     );
+  }
+}
+
+/// Выпадающий список конфигов со странами.
+class _ConfigSelector extends ConsumerWidget {
+  const _ConfigSelector();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profilesAsync = ref.watch(profilesProvider);
+
+    return profilesAsync.when(
+      data: (profiles) {
+        if (profiles.isEmpty) {
+          return const Text(
+            'Нет серверов. Добавьте конфиг в управлении.',
+            style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Серверы (${profiles.length}):',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            DropdownButton<String>(
+              isExpanded: true,
+              value: null,
+              hint: const Text('Выберите сервер…'),
+              items: profiles.map((profile) {
+                final flag = _flagForName(profile.name);
+                return DropdownMenuItem<String>(
+                  value: profile.name,
+                  child: Row(
+                    children: [
+                      Text(flag, style: const TextStyle(fontSize: 20)),
+                      const SizedBox(width: 8),
+                      Text(profile.name),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: null, // Выбор через _ServerList
+            ),
+          ],
+        );
+      },
+      loading: () => const CircularProgressIndicator(),
+      error: (e, st) => Text('Ошибка загрузки серверов: $e'),
+    );
+  }
+
+  String _flagForName(String name) {
+    final upper = name.toUpperCase();
+    const codes = <String, String>{
+      'PL': '🇵🇱', 'NL': '🇳🇱', 'FI': '🇫🇮', 'RU': '🇷🇺', 'US': '🇺🇸',
+      'DE': '🇩🇪', 'FR': '🇫🇷', 'GB': '🇬🇧', 'JP': '🇯🇵', 'SG': '🇸🇬',
+      'HK': '🇭🇰', 'KR': '🇰🇷', 'CA': '🇨🇦', 'AU': '🇦🇺', 'CH': '🇨🇭',
+      'SE': '🇸🇪', 'NO': '🇳🇴', 'DK': '🇩🇰', 'IE': '🇮🇪', 'ES': '🇪🇸',
+      'IT': '🇮🇹', 'PT': '🇵🇹', 'BR': '🇧🇷', 'AR': '🇦🇷', 'MX': '🇲🇽',
+      'IN': '🇮🇳', 'ID': '🇮🇩', 'TH': '🇹🇭', 'VN': '🇻🇳', 'TR': '🇹🇷',
+      'AE': '🇦🇪', 'SA': '🇸🇦', 'IL': '🇮🇱', 'ZA': '🇿🇦', 'EG': '🇪🇬',
+    };
+    for (final entry in codes.entries) {
+      if (upper.contains(entry.key)) return entry.value;
+    }
+    return '🌐';
   }
 }
 

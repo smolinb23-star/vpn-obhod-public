@@ -89,15 +89,15 @@ class ConnectionOrchestrator {
   PlatformBridge get _platform => ref.read(platformBridgeProvider);
 
   // Таймаут на один метод (подключение + проверка IP).
-  static const Duration _methodTimeout = Duration(seconds: 20);
+  static const Duration _methodTimeout = Duration(seconds: 15);
   // Таймаут на один HTTP-запрос IP.
-  static const Duration _ipCheckTimeout = Duration(seconds: 10);
+  static const Duration _ipCheckTimeout = Duration(seconds: 8);
   // Задержка после connect перед первой проверкой IP (Android обновляет таблицу маршрутизации).
-  static const Duration _postConnectDelay = Duration(seconds: 3);
+  static const Duration _postConnectDelay = Duration(seconds: 2);
   // Интервал между повторными проверками IP.
   static const Duration _ipRetryInterval = Duration(seconds: 2);
   // Количество повторных проверок IP перед признаком неудачи.
-  static const int _ipRetryCount = 3;
+  static const int _ipRetryCount = 2;
 
   /// Резервные эндпоинты для проверки IP (если api.ipify.org недоступен).
   static const List<String> _ipCheckUrls = [
@@ -347,7 +347,7 @@ class ConnectionOrchestrator {
     );
   }
 
-  /// Пробует один кандидата с таймаутом [_methodTimeout].
+  /// Пробует одного кандидата с таймаутом [_methodTimeout].
   ///
   /// Возвращает true если подключение установлено и IP изменился.
   Future<bool> _tryCandidate(ConnectionCandidate candidate) async {
@@ -358,9 +358,13 @@ class ConnectionOrchestrator {
     final completer = Completer<bool>();
     Timer? timeoutTimer;
 
+    appLog.info('ConnectionOrchestrator',
+        'Таймаут метода установлен на ${_methodTimeout.inSeconds} секунд');
+
     timeoutTimer = Timer(_methodTimeout, () {
       if (!completer.isCompleted) {
-        appLog.warn('ConnectionOrchestrator', 'Таймаут метода ${candidate.name}');
+        appLog.warn('ConnectionOrchestrator',
+            'Таймаут метода ${candidate.name} (${_methodTimeout.inSeconds}с)');
         _disconnectCandidate(candidate);
         completer.complete(false);
       }
@@ -387,7 +391,7 @@ class ConnectionOrchestrator {
           break;
         case ConnectionMethodType.cascade:
         case ConnectionMethodType.cidr:
-          // Mihomo handles all protocols through url-test, no separate cascade/cidr methods
+          // Mihomo обрабатывает все протоколы через url-test, отдельные методы не нужны
           timeoutTimer.cancel();
           _recordAttempt(candidate.name, false, 'Метод не поддерживается в Mihomo');
           return false;
