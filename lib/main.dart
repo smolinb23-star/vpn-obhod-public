@@ -1,9 +1,5 @@
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'core/widgets/root_screen.dart';
 import 'features/bypass/bypass_providers.dart';
@@ -12,12 +8,6 @@ import 'features/bypass/wins_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // sqflite_common_ffi для поддержки десктопов; на мобильных sqflite сам подхватит.
-  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  }
 
   // SQLite-память побед; при недоступности плагина — безопасный fallback.
   WinsRepository wins;
