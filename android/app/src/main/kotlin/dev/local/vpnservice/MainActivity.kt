@@ -14,19 +14,16 @@ class MainActivity : FlutterActivity() {
     private var platformBridge: PlatformBridge? = null
     private var mihomoBridge: MihomoBridge? = null
 
-    // Ссылка на binaryMessenger для использования в VpnForegroundService
-    private var binaryMessenger: io.flutter.embedding.engine.dart.DartMessenger? = null
-
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        binaryMessenger = flutterEngine.dartExecutor.binaryMessenger
+        val binaryMessenger = flutterEngine.dartExecutor.binaryMessenger
 
         // AWG Bridge
         val awg = AwgBridge(applicationContext)
         awgBridge = awg
         val awgChannel = MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
+            binaryMessenger,
             AwgBridge.CHANNEL,
         )
         awgChannel.setMethodCallHandler { call, result ->
@@ -47,7 +44,7 @@ class MainActivity : FlutterActivity() {
         val platform = PlatformBridge(applicationContext)
         platformBridge = platform
         val platformChannel = MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
+            binaryMessenger,
             PlatformBridge.CHANNEL,
         )
         platformChannel.setMethodCallHandler { call, result ->
@@ -58,24 +55,25 @@ class MainActivity : FlutterActivity() {
         val mihomo = MihomoBridge(applicationContext)
         mihomoBridge = mihomo
         val mihomoChannel = MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
+            binaryMessenger,
             MihomoBridge.CHANNEL,
         )
         val mihomoEventChannel = EventChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
+            binaryMessenger,
             MihomoBridge.STATUS_CHANNEL,
         )
         mihomo.setMethodCallHandler(mihomoChannel, mihomoEventChannel)
 
         // Vpn Control Channel (команды из уведомления foreground service → Flutter)
         val vpnControlChannel = MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
+            binaryMessenger,
             "dev.local.vpnservice/vpn_control",
         )
         vpnControlChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "show_notification" -> {
-                    val server = call.argument<String>("server") ?? ""
+                    val serverArg = call.arguments as? Map<*, *>
+                    val server = serverArg?.get("server")?.toString() ?: ""
                     val intent = Intent(this, VpnForegroundService::class.java)
                         .putExtra("server", server)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -99,16 +97,15 @@ class MainActivity : FlutterActivity() {
         // Обработка действий из уведомления foreground service
         when (intent?.action) {
             "dev.local.vpnservice.ACCELERATE" -> {
-                // Передаём в Flutter через MethodChannel
                 val channel = MethodChannel(
-                    flutterEngine?.dartExecutor?.binaryMessenger,
+                    flutterEngine.dartExecutor.binaryMessenger,
                     "dev.local.vpnservice/vpn_control",
                 )
                 channel.invokeMethod("accelerate", null)
             }
             "dev.local.vpnservice.STOP" -> {
                 val channel = MethodChannel(
-                    flutterEngine?.dartExecutor?.binaryMessenger,
+                    flutterEngine.dartExecutor.binaryMessenger,
                     "dev.local.vpnservice/vpn_control",
                 )
                 channel.invokeMethod("disconnect", null)
