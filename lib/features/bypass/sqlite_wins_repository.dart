@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'wins_repository.dart';
@@ -17,7 +15,7 @@ class SqliteWinsRepository implements WinsRepository {
   }
 
   String _key(String methodId, String networkKey) =>
-      'win_${methodId}_${networkKey}';
+      'win_$methodId_$networkKey';
 
   @override
   Future<int> winsFor(String methodId, String networkKey) async {

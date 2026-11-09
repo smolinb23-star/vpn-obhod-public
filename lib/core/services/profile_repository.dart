@@ -136,9 +136,6 @@ class ProfileRepository {
   }
 }
 
-/// Вспомогательный холдер (заглушка для совместимости).
-class _DatabaseHolder {}
-
 /// Провайдер ProfileRepository.
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
   return ProfileRepository();
