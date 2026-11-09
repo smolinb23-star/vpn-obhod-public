@@ -1,3 +1,4 @@
+// ignore_for_file: unused_import, unnecessary_brace_in_string_interps
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
