@@ -1,11 +1,11 @@
 {
-  "stage": 5.0,
-  "stage_status": "done_mihomo_core_apk_delivered",
+  "stage": 5.1,
+  "stage_status": "done_timeout_foreground_stop_apk_delivered",
   "apk": {
     "local": "dist/app-release.apk",
-    "size_bytes": 170926314,
-    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-71a8299b72c0d92956b17bd57e337c62e8dfe098",
-    "ci_run": 42574454484,
+    "size_bytes": 170939166,
+    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-d730872d09a006fd294929020cf4b1ef2411b983",
+    "ci_run": 42581393464,
     "signing": "debug (release keystore — MANUAL)",
     "magic": "PK ZIP",
     "native_libs": "libam-go.so + libam-quick.so + libam.so (AWG) + libxray.so (VLESS) для arm64-v8a/armeabi-v7a/x86_64"
@@ -22,7 +22,8 @@
     "public_14": "SUCCESS bc23db7 (3.4 Smart Auto-Connect: ConnectionOrchestrator + ConfigManagementScreen + упрощённый HomeScreen; analyze + 92 dart + 9 kotlin + apk) -> APK 101738662",
     "public_15": "SUCCESS 96e09e4 (3.4 Smart Auto-Connect final: I11 IP timeout 10с, post-connect delay 3с, 3 IP retry attempts, fallback endpoints, mobile VLESS priority, attempt history UI, cascade/CDN/CIDR bypass configs; analyze + 92 dart + 9 kotlin + apk) -> APK 101756662",
     "public_16": "SUCCESS 5f46fd4 (3.4.1 Split Tunneling: device_apps dependency, SplitTunnelingScreen UI, excludedApps in VpnService.start(), PROGRESS/STATE updated; analyze + 92 dart + 9 kotlin + apk) -> APK 101756662",
-    "public_17": "SUCCESS 55f8ee1 (Этап 4.3: нативный App Picker через PlatformBridge.getInstalledApps() (PackageManager, JSON с base64-иконками), ClashYamlParser (proxies→WireGuardConfig, amnezia-wg-option), XrayJsonParser (wireguard JSON с шумом), WGConfigParser/AwgConfBuilder расширены (I2-I5, ContentPaddingAddition, RekeyAfterTime, RejectAfterTime, MaxHandshakeAttempts), MASQUE→требует Sing-box; analyze + 92 dart + 9 kotlin + apk) -> APK TBD"
+    "public_17": "SUCCESS 55f8ee1 (Этап 4.3: нативный App Picker через PlatformBridge.getInstalledApps() (PackageManager, JSON с base64-иконками), ClashYamlParser (proxies→WireGuardConfig, amnezia-wg-option), XrayJsonParser (wireguard JSON с шумом), WGConfigParser/AwgConfBuilder расширены (I2-I5, ContentPaddingAddition, RekeyAfterTime, RejectAfterTime, MaxHandshakeAttempts), MASQUE→требует Sing-box; analyze + 92 dart + 9 kotlin + apk) -> APK TBD",
+    "public_18": "SUCCESS d730872 (Этап 5.1: таймаут подключения 15 с в mihomo_service.dart + логирование этапов в vpn_controller.dart; VpnForegroundService.kt с уведомлением в шторке (заголовок 'VPN Подключен', текст 'Сервер: <имя>', кнопки 'Ускорить' (перезапуск url-test) и 'Остановить' (полный disconnect); кнопка 'Сбросить / Остановить' на главном экране; analyze + 92 dart + 9 kotlin + apk) -> APK TBD"
   },
   "chosen_branches": {
     "vpn_core": "flutter_vless ^1.1.7",
@@ -134,5 +135,5 @@
     "ui": "ConfImportScreen (иконка-скрепка в AppBar HomeScreen), также вставка .conf текстом",
     "gotcha": "Dart base64Decode отвергает неканонические ключи — тестовые ключи должны быть каноническим base64 от 32 случайных байт"
   },
-  "next_step": "Этап 5 завершён. Проверить на телефоне: импорт ClashWARP_19.yaml (10+ серверов), импорт deWARPv3_87.conf (AmneziaWG), автовыбор сервера через url-test, Split Tunneling с иконками, конфиги сохраняются после перезапуска. Затемможно переходить к следующему этапу или поддерживать текущий."
+  "next_step": "Этап 5.1 завершён: таймаут подключения 15 с (Mihomo не ушёл в Connected → ошибка), Foreground Service с уведомлением (Ускорить/Остановить), кнопка Сбросить/Остановить на главном экране. Дальше: тестирование на телефоне (ClashWARP_19.yaml 10+ серверов, deWARPv3_87.conf AmneziaWG, автовыбор сервера через url-test, Split Tunneling с иконками, конфиги сохраняются после перезапуска), затем следующий этап."
 }
