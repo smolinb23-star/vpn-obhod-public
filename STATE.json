@@ -1,11 +1,11 @@
 {
-  "stage": 5.2,
-  "stage_status": "done_real_tun_awg_xray_notification_actions_server_selector_apk_delivered",
+  "stage": 5.3,
+  "stage_status": "done_speed_tuning_xtls_vision_tfo_dns_country_picker_apk_delivered",
   "apk": {
     "local": "dist/app-release.apk",
-    "size_bytes": 171164042,
-    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-c028a4353a687ae5277f9a0b51b9ea4c1d6fa95f",
-    "ci_run": 42597210011,
+    "size_bytes": 171181230,
+    "source_release": "https://github.com/smolinb23-star/vpn-obhod-public/releases/tag/apk-29508e7237e9390603f8ec68cd0dd767d9037dc2",
+    "ci_run": 42761918121,
     "signing": "debug (release keystore — MANUAL)",
     "magic": "PK ZIP",
     "native_libs": "libam-go.so + libam-quick.so + libam.so (AWG) + libxray.so (VLESS) для arm64-v8a/armeabi-v7a/x86_64"
@@ -25,7 +25,8 @@
     "public_17": "SUCCESS 55f8ee1 (Этап 4.3: нативный App Picker через PlatformBridge.getInstalledApps() (PackageManager, JSON с base64-иконками), ClashYamlParser (proxies→WireGuardConfig, amnezia-wg-option), XrayJsonParser (wireguard JSON с шумом), WGConfigParser/AwgConfBuilder расширены (I2-I5, ContentPaddingAddition, RekeyAfterTime, RejectAfterTime, MaxHandshakeAttempts), MASQUE→требует Sing-box; analyze + 92 dart + 9 kotlin + apk) -> APK TBD",
     "public_18": "SUCCESS d730872 (Этап 5.1: таймаут подключения 15 с в mihomo_service.dart + логирование этапов в vpn_controller.dart; VpnForegroundService.kt с уведомлением в шторке (заголовок 'VPN Подключен', текст 'Сервер: <имя>', кнопки 'Ускорить' (перезапуск url-test) и 'Остановить' (полный disconnect); кнопка 'Сбросить / Остановить' на главном экране; analyze + 92 dart + 9 kotlin + apk) -> APK TBD",
     "public_19": "SUCCESS d461e24 (Этап 5.1.2: TUN трафик - stack: system, auto_route, auto_detect_interface в интерфейсе; tcp fast_open + sniffer + enhanced_mode fake-ip в experimental; таймаут подключения 15 с с логированием этапов; VpnForegroundService.kt с уведомлением (Ускорить/Остановить); кнопка Сбросить/Остановить + выпадающий список конфигов со странами на главном экране; analyze + 92 dart + 9 kotlin + apk) -> APK 170939166",
-    "public_20": "SUCCESS c028a43 (Этап 5.2: MihomoBridge-заглушка убрана из пути подключения; awg/clash -> нативный AwgBridge + AmneziaWG GoBackend (реальный VpnService/TUN), vless/xray -> flutter_vless; Clash YAML -> отдельный профиль на каждый WireGuard-прокси (JSON-форма, address/ip/ipv6, psk, mtu, dns), стабильные id; уведомление 'VPN активен' с 'Ускорить'/'Остановить' через TunnelKeepAliveService + MainActivity.onNewIntent -> MethodChannel vpn_control -> Dart; forceResetVpn на красной кнопке; выбор сервера принудительный, без авто-подключения; PlatformBridge.isVpnActive; analyze + 92 dart + 9 kotlin + apk) -> APK 171164042"
+    "public_20": "SUCCESS c028a43 (Этап 5.2: MihomoBridge-заглушка убрана из пути подключения; awg/clash -> нативный AwgBridge + AmneziaWG GoBackend (реальный VpnService/TUN), vless/xray -> flutter_vless; Clash YAML -> отдельный профиль на каждый WireGuard-прокси (JSON-форма, address/ip/ipv6, psk, mtu, dns), стабильные id; уведомление 'VPN активен' с 'Ускорить'/'Остановить' через TunnelKeepAliveService + MainActivity.onNewIntent -> MethodChannel vpn_control -> Dart; forceResetVpn на красной кнопке; выбор сервера принудительный, без авто-подключения; PlatformBridge.isVpnActive; analyze + 92 dart + 9 kotlin + apk) -> APK 171164042",
+    "public_21": "SUCCESS 29508e7 (Этап 5.3: XrayTuning — sockopt tcpFastOpen/tcpNoDelay, XTLS Vision для VLESS Reality/TCP, быстрый DNS 1.1.1.1/8.8.8.8 + UseIPv4; tuning в ProfileParser и VpnService.start/startCascade/startCidr; AWG default DNS +8.8.8.8; флаги по рус/англ названиям и кодам-токенам; сохранение выбранного сервера; scripts/vps_optimize.sh (BBR/fq/буферы/TFO/MTU probing); analyze + 102 dart + 9 kotlin + apk) -> APK 171181230"
   },
   "chosen_branches": {
     "vpn_core": "flutter_vless ^1.1.7",
@@ -50,6 +51,10 @@
     {
       "id": "vps",
       "task": "VPS с Xray (VLESS Reality) — для боевых методов обхода"
+    },
+    {
+      "id": "vps_bbr",
+      "task": "На VPS от root выполнить scripts/vps_optimize.sh (BBR + fq, буферы 16 МиБ, keepalive 60 с, TCP Fast Open, MTU probing) и проверить sysctl net.ipv4.tcp_congestion_control = bbr. В Xray inbound включить flow xtls-rprx-vision и sockopt.tcpFastOpen. Без доступа к серверу агент это не применит."
     }
   ],
   "contracts": {
@@ -70,7 +75,9 @@
     "dwell_min": 5
   },
   "tests": {
-    "dart_total": 92,
+    "dart_total": 102,
+    "xray_tuning": 5,
+    "flag_for_name": 5,
     "profile_parser": 8,
     "config_validator": 8,
     "bypass_orchestrator": 8,
@@ -129,6 +136,16 @@
     ],
     "ci_green": true
   },
+  "stage_5_3": {
+    "status": "done_client_tuning_country_picker_apk",
+    "xray_tuning": "lib/core/services/xray_tuning.dart: sockopt.tcpFastOpen/tcpNoDelay для всех outbound; VLESS Reality+TCP без явного flow -> flow=xtls-rprx-vision; dns.servers=1.1.1.1/8.8.8.8 + queryStrategy=UseIPv4; явный flow=none не перетирается",
+    "apply_points": "ProfileParser (vless/hysteria2/raw JSON) и VpnService.start/startCascade/startCidr",
+    "fake_ip_note": "fake-ip есть только в Mihomo/sing-box (legacy-генератор уже содержит fake-ip/fast_open/sniffer); в Xray его нет — используются быстрый DNS и резолв на стороне прокси",
+    "awg_dns": "AwgConnectPlan.defaultDns = 1.1.1.1, 1.0.0.1, 8.8.8.8",
+    "country_picker": "флаги по рус/англ названиям и городам + 2-буквенный код как отдельный токен; последний выбранный профиль сохраняется в shared_preferences; подключение только выбранного сервера; красная кнопка forceResetVpn",
+    "vps_script": "scripts/vps_optimize.sh: BBR + fq, rmem/wmem 16 МиБ, keepalive 60 с, tcp_fastopen=3, tcp_mtu_probing=1; scripts/README.md — настройка Xray inbound (Vision/TFO). Требует root на VPS (MANUAL)",
+    "tests": "xray_tuning 5, flag_for_name 5; всего 102 dart"
+  },
   "conf_import": {
     "plugin": "file_picker ^8.3.7 (8.x совместим с Dart SDK 3.2)",
     "parser": "WGConfigParser: lib/core/services/wireguard_parser.dart, модель WireGuardConfig",
@@ -137,5 +154,5 @@
     "ui": "ConfImportScreen (иконка-скрепка в AppBar HomeScreen), также вставка .conf текстом",
     "gotcha": "Dart base64Decode отвергает неканонические ключи — тестовые ключи должны быть каноническим base64 от 32 случайных байт"
   },
-  "next_step": "Этап 5.2 завершён: реальный TUN (AWG GoBackend / flutter_vless), уведомление с рабочими «Ускорить»/«Остановить», принудительный выбор сервера и жёсткая остановка. Дальше: установить dist/app-release.apk и проверить на телефоне смену публичного IP на 2ip.ru за 5–10 с, отсутствие ошибок TUN/VpnService в logcat, кнопки уведомления, выбор страны; затем Этап 6."
+  "next_step": "Этап 5.3 завершён: клиентские оптимизации (XTLS Vision, TCP Fast Open, fast DNS), выбор страны с флагами и сохранением выбора, полная остановка. Дальше: установить dist/app-release.apk, импортировать конфиги стран, проверить субъективную скорость/задержку и смену IP; на VPS выполнить scripts/vps_optimize.sh (BBR). Затем Этап 6."
 }

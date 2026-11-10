@@ -31,6 +31,13 @@
   4) Главный экран: выпадающий список сохранённых серверов с флагами, ручной выбор принудительно подключает этот сервер (без авто-подбора), баннер ошибок, запрос POST_NOTIFICATIONS, нет авто-подключения при запуске. Стабильные id профилей `type-base64url(type|name)`.
   5) Проверка активного стороннего VPN через `PlatformBridge.isVpnActive()` до connect.
   - apk: OK (dist/app-release.apk, 171 164 042 байт, CI 42597210011, release apk-c028a4353a687ae5277f9a0b51b9ea4c1d6fa95f)
+- Этап 5.3 — DONE (код + APK) — Скорость, стабильность и выбор страны:
+  1) Клиентский `XrayTuning` (lib/core/services/xray_tuning.dart) применяется к каждому Xray-конфигу перед запуском: `sockopt.tcpFastOpen=true` + `tcpNoDelay=true` для всех outbound'ов; для VLESS Reality/TCP автоматически включается XTLS Vision (`flow: xtls-rprx-vision`, если flow не задан явно — явный `flow=none` сохраняется); добавляется быстрый DNS 1.1.1.1/8.8.8.8 и `queryStrategy: UseIPv4`. Fake-IP — механизм Mihomo/sing-box, в Xray его нет; для Xray роль fake-ip выполняет быстрый DNS + резолв домена на стороне прокси (в legacy Mihomo-генераторе fake-ip/fast_open/sniffer уже были).
+  2) Tuning встроен в `ProfileParser` (vless/hysteria2/raw JSON) и в `VpnService.start/startCascade/startCidr`, поэтому работает и для импортированных конфигов, и для сохранённых профилей. Тесты: `test/xray_tuning_test.dart` (5).
+  3) AWG: дефолтный DNS расширен до 1.1.1.1 / 1.0.0.1 / 8.8.8.8 (`AwgConnectPlan.defaultDns`).
+  4) Главный экран: флаги стран теперь понимают русские и английские названия/города (Нидерланды, Финляндия, Германия, Берлин, Амстердам и т.д.) и двухбуквенные коды только как отдельный токен (`NL-1`, `us.example`), чтобы `BERLIN` не превращался в Индию. Последний выбранный сервер сохраняется в `shared_preferences` и восстанавливается при запуске; кнопка «Подключиться» использует только выбранный профиль, без авто-подбора; красная «Остановить» → `forceResetVpn()`.
+  5) Серверная оптимизация: `scripts/vps_optimize.sh` (BBR + fq, буферы 16 МиБ, keepalive 60 с, TCP Fast Open, MTU probing) и `scripts/README.md` (настройка Xray inbound + Vision/TFO). Требует root на VPS — MANUAL, доступа к серверу у агента нет.
+  - apk: OK (dist/app-release.apk, 171 181 230 байт, CI 42761918121, release apk-29508e7237e9390603f8ec68cd0dd767d9037dc2)
 - Этап 6 — next — Звонки peer_rtc + Opus, офлайн-сообщения flutter_mesh_network, чат UI
 
 ## Зеркало и доставка APK
