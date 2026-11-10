@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:vpn_service/core/services/profile_repository.dart';
 import 'package:vpn_service/features/vpn/services/vpn_service.dart';
@@ -23,8 +24,30 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  static const String _selectedKey = 'selected_profile_id';
+
   bool _busy = false;
   String? _selectedId;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreSelected();
+  }
+
+  /// Восстанавливает последний выбранный сервер между запусками.
+  Future<void> _restoreSelected() async {
+    final prefs = await SharedPreferences.getInstance();
+    final id = prefs.getString(_selectedKey);
+    if (id != null && id.isNotEmpty && mounted) {
+      setState(() => _selectedId = id);
+    }
+  }
+
+  Future<void> _persistSelected(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_selectedKey, id);
+  }
 
   Future<void> _requestNotificationPermission() async {
     try {
@@ -43,6 +66,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _busy = true;
       _selectedId = profile.id;
     });
+    await _persistSelected(profile.id);
     await _requestNotificationPermission();
     try {
       await ref.read(vpnControllerProvider.notifier).connectProfile(profile);
@@ -421,9 +445,102 @@ class _ServerList extends StatelessWidget {
   }
 }
 
-/// Флаг страны по коду в имени сервера (🇳🇱 Нидерланды и т.п.).
+/// Флаг страны по названию/коду сервера (🇳🇱 Нидерланды и т.п.).
+///
+/// Сначала ищем названия стран и городов (рус/англ), затем двухбуквенный
+/// код как отдельный токен — чтобы «BERLIN» не превращался в 🇮🇳 (IN).
 String flagForName(String name) {
   final upper = name.toUpperCase();
+
+  const named = <String, String>{
+    // Нидерланды
+    'НИДЕРЛАНД': '🇳🇱', 'ГОЛЛАНД': '🇳🇱', 'АМСТЕРДАМ': '🇳🇱',
+    'NETHERLANDS': '🇳🇱', 'HOLLAND': '🇳🇱', 'AMSTERDAM': '🇳🇱',
+    // Финляндия
+    'ФИНЛЯНД': '🇫🇮', 'ХЕЛЬСИНКИ': '🇫🇮', 'FINLAND': '🇫🇮',
+    'HELSINKI': '🇫🇮',
+    // Германия
+    'ГЕРМАН': '🇩🇪', 'БЕРЛИН': '🇩🇪', 'ФРАНКФУРТ': '🇩🇪',
+    'GERMANY': '🇩🇪', 'BERLIN': '🇩🇪', 'FRANKFURT': '🇩🇪',
+    // Польша
+    'ПОЛЬШ': '🇵🇱', 'ВАРШАВ': '🇵🇱', 'POLAND': '🇵🇱', 'WARSAW': '🇵🇱',
+    // Франция
+    'ФРАНЦ': '🇫🇷', 'ПАРИЖ': '🇫🇷', 'FRANCE': '🇫🇷', 'PARIS': '🇫🇷',
+    // США
+    'США': '🇺🇸', 'АМЕРИК': '🇺🇸', 'НЬЮ-ЙОРК': '🇺🇸', 'СИЭТЛ': '🇺🇸',
+    'ЛОС-АНДЖЕЛЕС': '🇺🇸', 'МАЙАМИ': '🇺🇸', 'USA': '🇺🇸',
+    'UNITED STATES': '🇺🇸', 'NEW YORK': '🇺🇸', 'SEATTLE': '🇺🇸',
+    'LOS ANGELES': '🇺🇸', 'MIAMI': '🇺🇸',
+    // Великобритания
+    'ВЕЛИКОБРИТАН': '🇬🇧', 'АНГЛИ': '🇬🇧', 'ЛОНДОН': '🇬🇧',
+    'UNITED KINGDOM': '🇬🇧', 'LONDON': '🇬🇧', 'ENGLAND': '🇬🇧',
+    // Канада
+    'КАНАД': '🇨🇦', 'ТОРОНТО': '🇨🇦', 'CANADA': '🇨🇦', 'TORONTO': '🇨🇦',
+    // Швеция
+    'ШВЕЦИ': '🇸🇪', 'СТОКГОЛЬМ': '🇸🇪', 'SWEDEN': '🇸🇪', 'STOCKHOLM': '🇸🇪',
+    // Норвегия
+    'НОРВЕГИ': '🇳🇴', 'ОСЛО': '🇳🇴', 'NORWAY': '🇳🇴', 'OSLO': '🇳🇴',
+    // Дания
+    'ДАНИ': '🇩🇰', 'КОПЕНГАГЕН': '🇩🇰', 'DENMARK': '🇩🇰',
+    'COPENHAGEN': '🇩🇰',
+    // Швейцария
+    'ШВЕЙЦАРИ': '🇨🇭', 'ЦЮРИХ': '🇨🇭', 'SWITZERLAND': '🇨🇭', 'ZURICH': '🇨🇭',
+    // Австрия
+    'АВСТРИ': '🇦🇹', 'ВЕНА': '🇦🇹', 'AUSTRIA': '🇦🇹', 'VIENNA': '🇦🇹',
+    // Испания
+    'ИСПАНИ': '🇪🇸', 'МАДРИД': '🇪🇸', 'SPAIN': '🇪🇸', 'MADRID': '🇪🇸',
+    // Италия
+    'ИТАЛИ': '🇮🇹', 'МИЛАН': '🇮🇹', 'ITALY': '🇮🇹', 'MILAN': '🇮🇹',
+    // Турция
+    'ТУРЦИ': '🇹🇷', 'СТАМБУЛ': '🇹🇷', 'TURKEY': '🇹🇷', 'ISTANBUL': '🇹🇷',
+    // Япония
+    'ЯПОНИ': '🇯🇵', 'ТОКИО': '🇯🇵', 'JAPAN': '🇯🇵', 'TOKYO': '🇯🇵',
+    // Сингапур / Гонконг / Корея
+    'СИНГАПУР': '🇸🇬', 'SINGAPORE': '🇸🇬',
+    'ГОНКОНГ': '🇭🇰', 'HONG KONG': '🇭🇰', 'HONGKONG': '🇭🇰',
+    'КОРЕЯ': '🇰🇷', 'СЕУЛ': '🇰🇷', 'KOREA': '🇰🇷', 'SEOUL': '🇰🇷',
+    // Австралия
+    'АВСТРАЛИ': '🇦🇺', 'СИДНЕЙ': '🇦🇺', 'AUSTRALIA': '🇦🇺', 'SYDNEY': '🇦🇺',
+    // Индия / Бразилия
+    'ИНДИЯ': '🇮🇳', 'МУМБАИ': '🇮🇳', 'INDIA': '🇮🇳', 'MUMBAI': '🇮🇳',
+    'БРАЗИЛИ': '🇧🇷', 'BRAZIL': '🇧🇷',
+    // Балтия / СНГ
+    'ЛАТВИ': '🇱🇻', 'РИГА': '🇱🇻', 'LATVIA': '🇱🇻', 'RIGA': '🇱🇻',
+    'ЛИТВ': '🇱🇹', 'ВИЛЬНЮС': '🇱🇹', 'LITHUANIA': '🇱🇹',
+    'ЭСТОНИ': '🇪🇪', 'ТАЛЛИН': '🇪🇪', 'ESTONIA': '🇪🇪', 'TALLINN': '🇪🇪',
+    'УКРАИН': '🇺🇦', 'КИЕВ': '🇺🇦', 'UKRAINE': '🇺🇦',
+    'КАЗАХСТАН': '🇰🇿', 'АЛМАТЫ': '🇰🇿', 'KAZAKHSTAN': '🇰🇿',
+    'АРМЕНИ': '🇦🇲', 'ЕРЕВАН': '🇦🇲', 'ARMENIA': '🇦🇲',
+    'ГРУЗИ': '🇬🇪', 'ТБИЛИСИ': '🇬🇪', 'GEORGIA': '🇬🇪',
+    'МОЛДОВ': '🇲🇩', 'КИШИН': '🇲🇩', 'MOLDOVA': '🇲🇩',
+    // Прочее
+    'ЧЕХИ': '🇨🇿', 'ПРАГА': '🇨🇿', 'CZECH': '🇨🇿', 'PRAGUE': '🇨🇿',
+    'РУМЫНИ': '🇷🇴', 'БУХАРЕСТ': '🇷🇴', 'ROMANIA': '🇷🇴',
+    'БОЛГАРИ': '🇧🇬', 'СОФИЯ': '🇧🇬', 'BULGARIA': '🇧🇬',
+    'ВЕНГРИ': '🇭🇺', 'БУДАПЕШТ': '🇭🇺', 'HUNGARY': '🇭🇺',
+    'ГРЕЦИ': '🇬🇷', 'АФИНЫ': '🇬🇷', 'GREECE': '🇬🇷',
+    'ИЗРАИЛ': '🇮🇱', 'ISRAEL': '🇮🇱',
+    'ОАЭ': '🇦🇪', 'ДУБАЙ': '🇦🇪', 'DUBAI': '🇦🇪', 'EMIRATES': '🇦🇪',
+    'СЕРБИ': '🇷🇸', 'БЕЛГРАД': '🇷🇸', 'SERBIA': '🇷🇸',
+    'ИРЛАНД': '🇮🇪', 'ДУБЛИН': '🇮🇪', 'IRELAND': '🇮🇪', 'DUBLIN': '🇮🇪',
+    'БЕЛЬГИ': '🇧🇪', 'БРЮССЕЛЬ': '🇧🇪', 'BELGIUM': '🇧🇪',
+    'ПОРТУГАЛИ': '🇵🇹', 'ЛИССАБОН': '🇵🇹', 'PORTUGAL': '🇵🇹',
+    'МЕКСИК': '🇲🇽', 'MEXICO': '🇲🇽',
+    'АРГЕНТИН': '🇦🇷', 'ARGENTINA': '🇦🇷',
+    'ВЬЕТНАМ': '🇻🇳', 'VIETNAM': '🇻🇳',
+    'ТАИЛАНД': '🇹🇭', 'БАНГКОК': '🇹🇭', 'THAILAND': '🇹🇭',
+    'ИНДОНЕЗИ': '🇮🇩', 'INDONESIA': '🇮🇩',
+    'МАЛАЙЗИ': '🇲🇾', 'MALAYSIA': '🇲🇾',
+    'ФИЛИППИН': '🇵🇭', 'PHILIPPINES': '🇵🇭',
+    'ТАЙВАНЬ': '🇹🇼', 'TAIWAN': '🇹🇼',
+    'НОВАЯ ЗЕЛАНДИЯ': '🇳🇿', 'NEW ZEALAND': '🇳🇿',
+    'ИСЛАНДИ': '🇮🇸', 'ICELAND': '🇮🇸',
+    'РОССИ': '🇷🇺', 'МОСКВА': '🇷🇺', 'RUSSIA': '🇷🇺', 'MOSCOW': '🇷🇺',
+  };
+  for (final entry in named.entries) {
+    if (upper.contains(entry.key)) return entry.value;
+  }
+
   const codes = <String, String>{
     'PL': '🇵🇱', 'NL': '🇳🇱', 'FI': '🇫🇮', 'RU': '🇷🇺', 'US': '🇺🇸',
     'DE': '🇩🇪', 'FR': '🇫🇷', 'GB': '🇬🇧', 'UK': '🇬🇧', 'JP': '🇯🇵',
@@ -434,9 +551,15 @@ String flagForName(String name) {
     'TR': '🇹🇷', 'AE': '🇦🇪', 'SA': '🇸🇦', 'IL': '🇮🇱', 'ZA': '🇿🇦',
     'EG': '🇪🇬', 'LV': '🇱🇻', 'LT': '🇱🇹', 'EE': '🇪🇪', 'UA': '🇺🇦',
     'KZ': '🇰🇿', 'AM': '🇦🇲', 'GE': '🇬🇪', 'MD': '🇲🇩', 'RO': '🇷🇴',
+    'CZ': '🇨🇿', 'AT': '🇦🇹', 'BE': '🇧🇪', 'GR': '🇬🇷', 'HU': '🇭🇺',
+    'BG': '🇧🇬', 'RS': '🇷🇸', 'HR': '🇭🇷', 'SI': '🇸🇮', 'SK': '🇸🇰',
+    'NZ': '🇳🇿', 'IS': '🇮🇸', 'MY': '🇲🇾', 'PH': '🇵🇭', 'TW': '🇹🇼',
   };
-  for (final entry in codes.entries) {
-    if (upper.contains(entry.key)) return entry.value;
+  // Двухбуквенный код только как отдельный токен: NL-1, us.example, [DE].
+  final token = RegExp(r'(^|[^A-Z])([A-Z]{2})([^A-Z]|$)');
+  for (final match in token.allMatches(upper)) {
+    final flag = codes[match.group(2)];
+    if (flag != null) return flag;
   }
   return '🌐';
 }

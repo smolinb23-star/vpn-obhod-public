@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:vpn_service/core/models/vpn_config.dart';
 import 'package:vpn_service/core/services/config_validator.dart';
+import 'package:vpn_service/core/services/xray_tuning.dart';
 
 /// Состояние туннеля для UI.
 enum TunnelState { disconnected, connecting, connected, error }
@@ -99,7 +100,8 @@ class VpnService {
   /// [excludedApps] — список package names, которые НЕ будут идти через VPN
   /// (раздельное туннелирование).
   Future<void> start(VpnConfig config) async {
-    _validator.validateOrThrow(config.xrayJson);
+    final tuned = const XrayTuning().apply(config.xrayJson);
+    _validator.validateOrThrow(tuned);
     _publicIpBefore = await fetchPublicIp();
     final allowed = await _controller.requestPermission();
     if (!allowed) {
@@ -107,7 +109,7 @@ class VpnService {
     }
     await _controller.startVless(
       remark: config.remark,
-      config: config.xrayJson,
+      config: tuned,
     );
     _started = true;
   }
@@ -115,7 +117,9 @@ class VpnService {
   /// Запускает каскадный туннель: сначала до промежуточного сервера,
   /// затем трафик перенаправляется на зарубежный сервер.
   Future<void> startCascade(VpnConfig config) async {
-    _validator.validateOrThrow(config.xrayJson);
+    final primary = config.cascadeOutbound1?.xrayJson ?? config.xrayJson;
+    final tuned = const XrayTuning().apply(primary);
+    _validator.validateOrThrow(tuned);
     _publicIpBefore = await fetchPublicIp();
     final allowed = await _controller.requestPermission();
     if (!allowed) {
@@ -124,7 +128,7 @@ class VpnService {
     // Запускаем туннель к первому серверу (промежуточному)
     await _controller.startVless(
       remark: config.cascadeOutbound1?.remark ?? config.remark,
-      config: config.cascadeOutbound1?.xrayJson ?? config.xrayJson,
+      config: tuned,
     );
     _started = true;
   }
@@ -132,7 +136,8 @@ class VpnService {
   /// Запускает CIDR-маршрутизацию: трафик только к указанным IP-адресам
   /// проходит через VPN, остальной — напрямую.
   Future<void> startCidr(VpnConfig config) async {
-    _validator.validateOrThrow(config.xrayJson);
+    final tuned = const XrayTuning().apply(config.xrayJson);
+    _validator.validateOrThrow(tuned);
     _publicIpBefore = await fetchPublicIp();
     final allowed = await _controller.requestPermission();
     if (!allowed) {
@@ -140,7 +145,7 @@ class VpnService {
     }
     await _controller.startVless(
       remark: config.remark,
-      config: config.xrayJson,
+      config: tuned,
     );
     _started = true;
   }

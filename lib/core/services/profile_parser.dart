@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:vpn_service/core/models/vpn_config.dart';
+import 'package:vpn_service/core/services/xray_tuning.dart';
 
 /// Ошибки импорта профиля.
 class ConfigParseException implements Exception {
@@ -243,7 +244,7 @@ class ProfileParser {
     return VpnConfig(
       remark: uri.fragment.isEmpty ? 'VLESS $host' : Uri.decodeComponent(uri.fragment),
       protocol: ProfileProtocol.vless,
-      xrayJson: jsonEncode(config),
+      xrayJson: const XrayTuning().apply(jsonEncode(config)),
       stream: type,
       security: security,
       host: hostHeader.isNotEmpty ? hostHeader : sni,
@@ -307,7 +308,7 @@ class ProfileParser {
     return VpnConfig(
       remark: uri.fragment.isEmpty ? 'Hysteria2 $host' : Uri.decodeComponent(uri.fragment),
       protocol: ProfileProtocol.hysteria2,
-      xrayJson: jsonEncode(config),
+      xrayJson: const XrayTuning().apply(jsonEncode(config)),
       stream: 'quic',
       security: 'tls',
       host: sni,
@@ -340,7 +341,7 @@ class ProfileParser {
     return VpnConfig(
       remark: 'JSON ${first['protocol'] ?? '?'}',
       protocol: protocol,
-      xrayJson: jsonEncode(map),
+      xrayJson: const XrayTuning().apply(jsonEncode(map)),
       stream: stream['network'] as String? ?? '',
       security: stream['security'] as String? ?? '',
     );

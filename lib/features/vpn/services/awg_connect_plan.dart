@@ -25,7 +25,11 @@ class AwgConnectPlan {
   final bool endpointResolved;
   final int mtu;
 
-  static const List<String> defaultDns = <String>['1.1.1.1', '1.0.0.1'];
+  static const List<String> defaultDns = <String>[
+    '1.1.1.1',
+    '1.0.0.1',
+    '8.8.8.8',
+  ];
   static const int defaultMtu = 1280;
 
   /// Строит план. [resolver] инъектируется в тестах.
